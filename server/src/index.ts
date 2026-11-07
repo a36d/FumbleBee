@@ -3,7 +3,7 @@ import * as spacetimeDb from 'spacetimedb/server';
 const { schema, table, SenderError } = spacetimeDb;
 const t = (spacetimeDb as any).t;
 
-export const user = table(
+const user = table(
   { name: 'User', public: true },
   {
     identity: t.identity().primaryKey(),
@@ -14,7 +14,7 @@ export const user = table(
   },
 );
 
-export const incident = table(
+const incident = table(
   { name: 'Incident', public: true },
   {
     id: t.u64().primaryKey().autoInc(),
@@ -26,12 +26,17 @@ export const incident = table(
     riskScore: t.u8(),
     classification: t.string(),
     summary: t.string(),
+    triggerDetails: t.string(),
+    blastRadius: t.u32(),
+    confidence: t.u32(),
+    impactSummary: t.string(),
+    recommendations: t.string(),
     createdBy: t.identity(),
     createdAt: t.timestamp(),
   },
 );
 
-export const asset = table(
+const asset = table(
   { name: 'Asset', public: true },
   {
     id: t.u64().primaryKey().autoInc(),
@@ -40,10 +45,11 @@ export const asset = table(
     name: t.string(),
     assetType: t.string(),
     riskLevel: t.string(),
+    description: t.string(),
   },
 );
 
-export const relationship = table(
+const relationship = table(
   { name: 'Relationship', public: true },
   {
     id: t.u64().primaryKey().autoInc(),
@@ -54,7 +60,7 @@ export const relationship = table(
   },
 );
 
-export const investigationNote = table(
+const investigationNote = table(
   { name: 'InvestigationNote', public: true },
   {
     id: t.u64().primaryKey().autoInc(),
@@ -66,7 +72,7 @@ export const investigationNote = table(
   },
 );
 
-export const activityFeed = table(
+const activityFeed = table(
   { name: 'ActivityFeed', public: true },
   {
     id: t.u64().primaryKey().autoInc(),
@@ -77,7 +83,7 @@ export const activityFeed = table(
   },
 );
 
-export const auditLog = table(
+const auditLog = table(
   { name: 'AuditLog', public: true },
   {
     sequenceId: t.u64().primaryKey().autoInc(),
@@ -255,11 +261,16 @@ export const createIncident = spacetime.reducer(
       title: args.title,
       description: args.description,
       subjectName: args.subjectName,
-      status: args.status,
+      status: args.status && args.status !== 'Open' ? args.status : 'Investigating',
       severity: args.severity,
       riskScore: 0,
       classification: 'Pending Analysis',
       summary: '',
+      triggerDetails: '',
+      blastRadius: 0,
+      confidence: 0,
+      impactSummary: '',
+      recommendations: '[]',
       createdBy: ctx.sender,
       createdAt: ctx.timestamp,
     });
@@ -315,21 +326,44 @@ export const applyAiAnalysis = spacetime.reducer(
     classification: t.string(),
     riskScore: t.u8(),
     severity: t.string(),
-    blastRadius: t.u16(),
-    confidence: t.u8(),
-    summary: t.string(),
-    affectedAssets: t.array(t.string()),
-    attackGraphEdges: t.array(t.object({
-      source: t.string(),
-      target: t.string(),
-      relationLabel: t.string(),
-    })),
-    recommendations: t.array(t.string()),
+    blastRadius: t.u32(),
+    confidence: t.u32(),
+    impactSummary: t.string(),
+    recommendations: t.string(),
+    assets: t.string(),
+    relationships: t.string(),
   },
   (ctx: any, args: any) => {
     const actor = requireRole(ctx as any, ['admin', 'investigator']);
     const existing = ctx.db.incident.id.find(args.incidentId);
     if (!existing) throw new SenderError('Incident not found');
+
+    let parsedAssets: any[] = [];
+    let parsedRelationships: any[] = [];
+    let parsedRecommendations: string[] = [];
+    try {
+      parsedAssets = typeof args.assets === 'string' ? JSON.parse(args.assets || '[]') : args.assets ?? [];
+    } catch {
+      parsedAssets = [];
+    }
+    try {
+      parsedRelationships = typeof args.relationships === 'string'
+        ? JSON.parse(args.relationships || '[]')
+        : args.relationships ?? [];
+    } catch {
+      parsedRelationships = [];
+    }
+    try {
+      parsedRecommendations = typeof args.recommendations === 'string'
+        ? JSON.parse(args.recommendations || '[]')
+        : args.recommendations ?? [];
+    } catch {
+      parsedRecommendations = [];
+    }
+    if (!Array.isArray(parsedAssets)) parsedAssets = [];
+    if (!Array.isArray(parsedRelationships)) parsedRelationships = [];
+    if (!Array.isArray(parsedRecommendations)) parsedRecommendations = [];
+    parsedRecommendations = parsedRecommendations.filter((recommendation: unknown): recommendation is string => typeof recommendation === 'string');
 
     ctx.db.incident.id.delete(args.incidentId);
     ctx.db.incident.insert({
@@ -337,31 +371,40 @@ export const applyAiAnalysis = spacetime.reducer(
       severity: args.severity,
       riskScore: args.riskScore,
       classification: args.classification,
-      summary: args.summary,
+      summary: args.impactSummary,
+      impactSummary: args.impactSummary,
+      blastRadius: args.blastRadius,
+      confidence: args.confidence,
+      recommendations: JSON.stringify(parsedRecommendations),
     });
 
-    const assetKeys = new Set<string>(args.affectedAssets);
-    for (const edge of args.attackGraphEdges) {
-      assetKeys.add(edge.source);
-      assetKeys.add(edge.target);
+    const assetKeys = new Set<string>();
+    for (const asset of parsedAssets) {
+      assetKeys.add(asset.id);
+    }
+    for (const edge of parsedRelationships) {
+      assetKeys.add(edge.sourceId ?? edge.source);
+      assetKeys.add(edge.targetId ?? edge.target);
     }
     for (const assetKey of assetKeys) {
+      const asset = parsedAssets.find((candidate: any) => candidate.id === assetKey);
       ctx.db.asset.insert({
         id: 0n,
         incidentId: args.incidentId,
         assetKey,
-        name: assetKey,
-        assetType: 'AffectedAsset',
-        riskLevel: args.severity,
+        name: asset?.name ?? assetKey,
+        assetType: asset?.type ?? 'resource',
+        riskLevel: asset?.riskLabel ?? args.severity,
+        description: asset?.description ?? '',
       });
     }
-    for (const edge of args.attackGraphEdges) {
+    for (const edge of parsedRelationships) {
       ctx.db.relationship.insert({
         id: 0n,
         incidentId: args.incidentId,
-        sourceAssetKey: edge.source,
-        targetAssetKey: edge.target,
-        relationLabel: edge.relationLabel,
+        sourceAssetKey: edge.sourceId ?? edge.source ?? '',
+        targetAssetKey: edge.targetId ?? edge.target ?? '',
+        relationLabel: edge.label ?? edge.relationLabel ?? '',
       });
     }
 

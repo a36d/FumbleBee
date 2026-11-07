@@ -21,12 +21,12 @@ export async function commitAiAnalysis(
     blastRadius: analysis.blastRadius,
     confidence: analysis.confidence,
     impactSummary: analysis.impactSummary,
-    recommendations: analysis.recommendations,
-    assets: analysis.assets,
-    relationships: analysis.edges.map(edge => ({
+    recommendations: JSON.stringify(analysis.recommendations),
+    assets: JSON.stringify(analysis.assets),
+    relationships: JSON.stringify(analysis.edges.map(edge => ({
       source: edge.sourceId,
       target: edge.targetId,
       relationLabel: edge.label,
-    })),
+    }))),
   });
 }
