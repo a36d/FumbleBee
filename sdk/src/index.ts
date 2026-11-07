@@ -407,16 +407,17 @@ export interface SentinelGraphTransport {
 
 export interface SentinelGraphClientOptions {
   host: string;
-  databaseName: string;
+  databaseName?: string;
+  dbName?: string;
   token?: string;
-  transport: SentinelGraphTransport;
+  transport?: SentinelGraphTransport;
 }
 
 export class SentinelGraphClient {
   constructor(public readonly options: SentinelGraphClientOptions) {}
 
   private call(name: string, args: Record<string, unknown>): void | Promise<void> {
-    if (!this.options.transport.reducer) {
+    if (!this.options.transport?.reducer) {
       throw new Error('A SpacetimeDB reducer invoker is required');
     }
     return this.options.transport.reducer.call(name, args);
@@ -452,13 +453,13 @@ export class SentinelGraphClient {
       blastRadius: analysis.blastRadius,
       confidence: analysis.confidence,
       impactSummary: analysis.impactSummary,
-      recommendations: analysis.recommendations,
-      assets: analysis.assets,
-      relationships: analysis.edges.map(edge => ({
+      recommendations: JSON.stringify(analysis.recommendations),
+      assets: JSON.stringify(analysis.assets),
+      relationships: JSON.stringify(analysis.edges.map(edge => ({
         source: edge.sourceId,
         target: edge.targetId,
         relationLabel: edge.label,
-      })),
+      }))),
     });
   }
 
@@ -480,7 +481,7 @@ export class SentinelGraphClient {
       'Incident', 'Asset', 'Relationship', 'InvestigationNote', 'ActivityFeed', 'AuditLog',
     ],
   ): () => void {
-    if (!this.options.transport.subscribe) return () => undefined;
+    if (!this.options.transport?.subscribe) return () => undefined;
     return this.options.transport.subscribe(tables, listener);
   }
 }

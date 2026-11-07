@@ -2,7 +2,8 @@
 *SKILL.md
 
 # Dependencies
-/node_modules
+node_modules/
+dist/
 
 # Next.js
 /.next/
@@ -14,3 +15,5 @@
 # Local environment files
 .env*
 !.env.example
+.env
+.env.local
