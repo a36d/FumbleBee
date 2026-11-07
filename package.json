@@ -1,0 +1,17 @@
+{
+  "name": "sentinelgraph-ai",
+  "private": true,
+  "workspaces": [
+    "server",
+    "services",
+    "sdk"
+  ],
+  "scripts": {
+    "build": "npm run build -w server && npm run build -w services && npm run build -w sdk",
+    "test": "npm run build"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.9.0"
+  }
+}

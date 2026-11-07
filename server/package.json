@@ -1,0 +1,17 @@
+{
+  "name": "@sentinelgraph/server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "publish-module": "spacetime publish --server local sentinelgraph"
+  },
+  "dependencies": {
+    "spacetimedb": "^2.14.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.0"
+  }
+}

@@ -1,2 +1,7 @@
 # Local Developer AI Guidelines (Developer A & Developer B)
 *SKILL.md
+
+node_modules/
+dist/
+.env
+.env.local
