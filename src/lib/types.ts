@@ -1,6 +1,6 @@
 export type Severity = "Critical" | "High" | "Medium" | "Low";
 export type IncidentStatus = "Investigating" | "In review" | "Contained" | "Closed";
-export type AssetType = "identity" | "share" | "database";
+export type AssetType = "identity" | "share" | "database" | "resource";
 
 export interface Incident {
   id: string;

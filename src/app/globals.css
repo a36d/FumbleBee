@@ -226,19 +226,22 @@ tbody tr:hover { background: rgba(255,255,255,.015); }
 .graph-status .status-dot { width: 5px; height: 5px; margin: 0; }
 .graph-status-divider { width: 1px; height: 10px; margin: 0 1px; background: #354352; }
 .asset-node { position: relative; width: 238px; min-height: 88px; padding: 10px 11px 8px; border: 1px solid #45505e; border-radius: 7px; background: linear-gradient(140deg, #121c28, #0e1722); box-shadow: 0 7px 24px rgba(0,0,0,.24); }
-.node-identity { border-color: rgba(244, 104, 120, .65); box-shadow: inset 0 1px 0 rgba(244, 104, 120, .08), 0 5px 22px rgba(225, 75, 96, .07); }
-.node-share { border-color: rgba(238, 178, 78, .62); box-shadow: inset 0 1px 0 rgba(238, 178, 78, .07), 0 5px 22px rgba(226, 164, 54, .06); }
-.node-database { border-color: rgba(244, 104, 137, .65); box-shadow: inset 0 1px 0 rgba(244, 104, 137, .08), 0 5px 22px rgba(225, 75, 119, .07); }
+.node-risk-critical { border-color: rgba(244, 104, 120, .72); box-shadow: inset 0 1px 0 rgba(244, 104, 120, .1), 0 5px 22px rgba(225, 75, 96, .1); }
+.node-risk-high { border-color: rgba(238, 155, 78, .72); box-shadow: inset 0 1px 0 rgba(238, 155, 78, .1), 0 5px 22px rgba(226, 137, 54, .09); }
+.node-risk-medium { border-color: rgba(238, 190, 78, .7); box-shadow: inset 0 1px 0 rgba(238, 190, 78, .1), 0 5px 22px rgba(226, 172, 54, .08); }
+.node-risk-low { border-color: rgba(88, 209, 157, .68); box-shadow: inset 0 1px 0 rgba(88, 209, 157, .09), 0 5px 22px rgba(54, 180, 122, .07); }
 .asset-node-top { display: flex; align-items: center; gap: 6px; color: #92a0b0; font-size: 7px; letter-spacing: .65px; font-weight: 700; }
 .asset-icon { display: grid; place-items: center; width: 21px; height: 20px; border-radius: 4px; color: #f58b94; background: rgba(218, 66, 83, .14); }
-.node-share .asset-icon { color: #f0bc63; background: rgba(216, 152, 38, .13); }
-.node-database .asset-icon { color: #fa7991; background: rgba(212, 56, 88, .14); }
+.asset-resource .asset-icon { color: #f0bc63; background: rgba(216, 152, 38, .13); }
+.asset-database .asset-icon { color: #fa7991; background: rgba(212, 56, 88, .14); }
 .asset-node-top > i { width: 5px; height: 5px; margin-left: auto; border-radius: 50%; background: #fb7381; box-shadow: 0 0 7px rgba(251,115,129,.55); }
-.node-share .asset-node-top > i { background: #eab557; box-shadow: 0 0 7px rgba(234,181,87,.4); }
+.node-risk-high .asset-node-top > i, .node-risk-medium .asset-node-top > i { background: #eab557; box-shadow: 0 0 7px rgba(234,181,87,.4); }
+.node-risk-low .asset-node-top > i { background: #58d19d; box-shadow: 0 0 7px rgba(88,209,157,.4); }
 .asset-node strong { display: block; margin-top: 7px; color: #e2e8ef; font-size: 11px; font-weight: 600; }
 .asset-node > small { display: block; margin-top: 3px; color: #7f8e9f; font-size: 8px; }
 .asset-node-risk { position: absolute; right: 10px; bottom: 8px; color: #dd9397; font-size: 7px; }
-.node-share .asset-node-risk { color: #d8b26f; }
+.node-risk-high .asset-node-risk, .node-risk-medium .asset-node-risk { color: #d8b26f; }
+.node-risk-low .asset-node-risk { color: #80d5a9; }
 .graph-legend { position: absolute; z-index: 4; right: 12px; bottom: 11px; display: flex; gap: 11px; padding: 6px 8px; border: 1px solid #222f3d; border-radius: 4px; background: rgba(12, 19, 28, .9); color: #8290a1; font-size: 8px; }
 .graph-legend span { display: inline-flex; align-items: center; gap: 5px; }
 .legend-dot { width: 6px; height: 6px; border-radius: 50%; }
@@ -289,6 +292,7 @@ tbody tr:hover { background: rgba(255,255,255,.015); }
 .recommendation-done .recommendation-check { color: #6bd4a8 !important; border-color: rgba(82, 196, 146, .35); background: rgba(56, 145, 108, .13); }
 .text-action { display: inline-flex; align-items: center; gap: 5px; margin: 11px 15px 0; padding: 0; border: 0; background: transparent; color: #a897e5; font-size: 9px; font-weight: 600; cursor: pointer; }
 .text-action:hover { color: #c5b6ff; }
+.analysis-error { margin: -8px 0 14px; padding: 9px 11px; border: 1px solid rgba(236, 104, 119, .3); border-radius: 5px; background: rgba(161, 52, 69, .12); color: #ff9aa4; font-size: 10px; }
 .notes-panel { overflow: hidden; }
 .compact-heading { padding: 13px 15px 11px; }
 .panel-icon-blue { color: #77bdec; background: rgba(53, 125, 179, .13); }

@@ -3,7 +3,9 @@
 import { useMemo, useState } from "react";
 import { Activity, AlertTriangle, ArrowLeft, ArrowUpRight, Check, CheckCircle2, Clock3, FileClock, Fingerprint, LoaderCircle, LockKeyhole, Plus, Shield, Sparkles } from "lucide-react";
 import Link from "next/link";
-import { activity as initialActivity, auditLogs, incidents, notes as initialNotes, relativeTime } from "@/lib/mock-data";
+import { formatAttackGraph, type AiAnalysisInput } from "../../sdk/src/index";
+import { activity as initialActivity, assets, auditLogs, incidents, notes as initialNotes, relationships, relativeTime } from "@/lib/mock-data";
+import { getAttackPathLayout } from "@/lib/graph-layout";
 import type { ActivityFeed, InvestigationNote } from "@/lib/types";
 import { AttackGraph } from "@/components/attack-graph";
 import { SeverityBadge, StatusBadge } from "@/components/severity-badge";
@@ -16,18 +18,60 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
   const [events, setEvents] = useState(initialActivity.filter((item) => item.incidentId === incident.id));
   const [noteText, setNoteText] = useState("");
   const [analysisRunning, setAnalysisRunning] = useState(false);
+  const [analysisError, setAnalysisError] = useState("");
+  const [analysisResult, setAnalysisResult] = useState<AiAnalysisInput | null>(null);
+  const [graph, setGraph] = useState(() => {
+    const formattedGraph = formatAttackGraph(assets, relationships);
+    return getAttackPathLayout(formattedGraph.nodes, formattedGraph.edges);
+  });
   const [auditOpen, setAuditOpen] = useState(false);
   const [checked, setChecked] = useState<string[]>([]);
 
-  function runAnalysis() {
+  async function runAnalysis() {
     if (analysisRunning) return;
     setAnalysisRunning(true);
-    window.setTimeout(() => {
+    setAnalysisError("");
+    try {
+      const response = await fetch("/api/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: incident.title,
+          description: incident.description,
+          notes: notes.map((note) => note.content),
+        }),
+      });
+      const result = await response.json() as {
+        analysis?: AiAnalysisInput;
+        source?: "nemotron" | "mock";
+        error?: string;
+      };
+      if (!response.ok || !result.analysis) {
+        throw new Error(result.error ?? "Analysis could not be completed.");
+      }
+
+      const { analysis } = result;
+      const formattedGraph = formatAttackGraph(analysis.assets, analysis.edges);
+      setGraph(getAttackPathLayout(formattedGraph.nodes, formattedGraph.edges));
+      setAnalysisResult(analysis);
       const event: ActivityFeed = { id: `analysis-${Date.now()}`, incidentId: incident.id, action: "AI analysis completed", actor: "SentinelGraph AI", createdAt: new Date().toISOString(), kind: "analysis" };
       setEvents((current) => [event, ...current]);
+    } catch (error) {
+      setAnalysisError(error instanceof Error ? error.message : "Analysis could not be completed.");
+    } finally {
       setAnalysisRunning(false);
-    }, 1700);
+    }
   }
+
+  const findings = {
+    threatClassification: analysisResult?.threatClassification ?? incident.threatClassification,
+    riskScore: analysisResult?.riskScore ?? incident.riskScore,
+    severity: analysisResult?.severity ?? incident.severity,
+    blastRadius: analysisResult?.blastRadius ?? incident.blastRadius,
+    confidence: analysisResult?.confidence ?? incident.confidence,
+    impactSummary: analysisResult?.impactSummary ?? incident.impactSummary,
+    recommendations: analysisResult?.recommendations ?? incident.recommendations,
+  };
 
   function addNote(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -46,11 +90,12 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
         <div><Link href="/" className="back-link"><ArrowLeft size={14} /> All investigations</Link><div className="investigation-title-row"><h1>{incident.title}</h1><SeverityBadge severity={incident.severity} /></div><div className="investigation-meta"><span>{incident.id}</span><span className="meta-dot">·</span><span>Subject: <strong>{incident.subjectName}</strong></span><span className="meta-dot">·</span><StatusBadge status={incident.status} /></div></div>
         <div className="heading-actions"><button className="button button-secondary" onClick={() => setAuditOpen(true)}><Fingerprint size={16} /> Audit trail</button><button className="button button-primary" onClick={runAnalysis} disabled={analysisRunning}>{analysisRunning ? <LoaderCircle className="spin" size={16} /> : <Sparkles size={16} />}{analysisRunning ? "Analyzing..." : "Run AI analysis"}</button></div>
       </div>
+      {analysisError && <p className="analysis-error" role="alert">{analysisError}</p>}
 
       <div className="investigation-summary panel">
-        <div className="summary-score"><div className="score-gauge" style={{ "--score": `${incident.riskScore}%` } as React.CSSProperties}><span>{incident.riskScore}</span><small>RISK</small></div><div><span className="summary-label">RISK SCORE</span><strong className="summary-score-text">Critical risk detected</strong><small>Updated 12 minutes ago</small></div></div>
-        <div className="summary-separator" /><div className="summary-stat"><span className="summary-label">THREAT CLASSIFICATION</span><strong><span className="classification-icon"><AlertTriangle size={14} /></span>{incident.threatClassification}</strong><small>Confidence {incident.confidence}%</small></div>
-        <div className="summary-separator" /><div className="summary-stat"><span className="summary-label">BLAST RADIUS</span><strong className="blast-number">{incident.blastRadius} <small>assets</small></strong><small>Across 3 connected systems</small></div>
+        <div className="summary-score"><div className="score-gauge" style={{ "--score": `${findings.riskScore}%` } as React.CSSProperties}><span>{findings.riskScore}</span><small>RISK</small></div><div><span className="summary-label">RISK SCORE</span><strong className="summary-score-text">{findings.severity} risk detected</strong><small>Updated {analysisResult ? "just now" : "12 minutes ago"}</small></div></div>
+        <div className="summary-separator" /><div className="summary-stat"><span className="summary-label">THREAT CLASSIFICATION</span><strong><span className="classification-icon"><AlertTriangle size={14} /></span>{findings.threatClassification}</strong><small>Confidence {findings.confidence}%</small></div>
+        <div className="summary-separator" /><div className="summary-stat"><span className="summary-label">BLAST RADIUS</span><strong className="blast-number">{findings.blastRadius} <small>assets</small></strong><small>Across connected systems</small></div>
         <div className="summary-separator" /><div className="summary-stat"><span className="summary-label">CREATED</span><strong>{relativeTime(incident.createdAt)}</strong><small>By detection engine</small></div>
       </div>
 
@@ -58,19 +103,19 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
         <div className="investigation-left">
           <section className="panel graph-panel">
             <div className="panel-heading graph-heading"><div><div className="section-title-row"><span className="panel-heading-icon"><Activity size={16} /></span><h2>Attack path</h2><span className="ai-generated"><Sparkles size={11} /> AI GENERATED</span></div><p>Observed entity relationships and potential data exposure path</p></div><button className="button button-quiet" onClick={() => setAuditOpen(true)}><LockKeyhole size={14} /> Evidence log</button></div>
-            <AttackGraph />
+            <AttackGraph nodes={graph.nodes} edges={graph.edges} />
             <div className="graph-footnote"><span><i className="graph-foot-dot" /> Path confidence <strong>96%</strong></span><span>Generated Nov 18, 2024 at 09:44 UTC</span></div>
           </section>
-          <section className="panel impact-panel"><div className="panel-heading"><div><div className="section-title-row"><span className="panel-heading-icon panel-icon-rose"><AlertTriangle size={16} /></span><h2>Impact summary</h2></div></div><span className="impact-tag">HIGH IMPACT</span></div><p>{incident.impactSummary} Activity spans <strong>3 connected systems</strong> with access to <strong>12 high-value assets</strong>.</p><div className="impact-tags"><span><DatabaseIcon /> Customer records</span><span><CodeIcon /> Source code</span><span><LockKeyhole size={12} /> Restricted share</span></div></section>
+          <section className="panel impact-panel"><div className="panel-heading"><div><div className="section-title-row"><span className="panel-heading-icon panel-icon-rose"><AlertTriangle size={16} /></span><h2>Impact summary</h2></div></div><span className="impact-tag">{findings.severity.toUpperCase()} IMPACT</span></div><p>{findings.impactSummary} Activity spans <strong>{findings.blastRadius} connected assets</strong>.</p><div className="impact-tags"><span><DatabaseIcon /> Customer records</span><span><CodeIcon /> Source code</span><span><LockKeyhole size={12} /> Restricted share</span></div></section>
         </div>
 
         <div className="investigation-right">
           <section className="panel findings-panel">
-            <div className="panel-heading findings-heading"><div><div className="section-title-row"><span className="panel-heading-icon panel-icon-violet"><Sparkles size={16} /></span><h2>AI findings</h2></div><p>Nemotron-powered investigation insights</p></div><span className="confidence-chip"><span />{incident.confidence}% confidence</span></div>
-            <div className="finding-classification"><span className="summary-label">CLASSIFICATION</span><div><span className="classification-icon"><AlertTriangle size={14} /></span><strong>{incident.threatClassification}</strong><span className="finding-severity">Critical</span></div></div>
-            <div className="finding-blast"><div><span className="summary-label">ESTIMATED BLAST RADIUS</span><small>Potentially affected assets</small></div><strong>{incident.blastRadius}<span> assets</span></strong></div>
-            <div className="finding-summary"><span className="summary-label">IMPACT SUMMARY</span><p>{incident.impactSummary}</p></div>
-            <div className="recommendations"><span className="summary-label">RECOMMENDED ACTIONS</span>{incident.recommendations.map((recommendation, index) => {
+            <div className="panel-heading findings-heading"><div><div className="section-title-row"><span className="panel-heading-icon panel-icon-violet"><Sparkles size={16} /></span><h2>AI findings</h2></div><p>Nemotron-powered investigation insights</p></div><span className="confidence-chip"><span />{findings.confidence}% confidence</span></div>
+            <div className="finding-classification"><span className="summary-label">CLASSIFICATION</span><div><span className="classification-icon"><AlertTriangle size={14} /></span><strong>{findings.threatClassification}</strong><span className="finding-severity">{findings.severity}</span></div></div>
+            <div className="finding-blast"><div><span className="summary-label">ESTIMATED BLAST RADIUS</span><small>Potentially affected assets</small></div><strong>{findings.blastRadius}<span> assets</span></strong></div>
+            <div className="finding-summary"><span className="summary-label">IMPACT SUMMARY</span><p>{findings.impactSummary}</p></div>
+            <div className="recommendations"><span className="summary-label">RECOMMENDED ACTIONS</span>{findings.recommendations.map((recommendation, index) => {
               const isChecked = checked.includes(recommendation);
               return <button className={`recommendation ${isChecked ? "recommendation-done" : ""}`} key={recommendation} onClick={() => setChecked((current) => isChecked ? current.filter((value) => value !== recommendation) : [...current, recommendation])}><span className="recommendation-check">{isChecked ? <Check size={12} /> : index + 1}</span><span>{recommendation}</span><span className={`action-priority ${index === 0 ? "priority-immediate" : ""}`}>{index === 0 ? "Immediate" : "Recommended"}</span></button>;
             })}</div>
