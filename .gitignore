@@ -1,2 +1,16 @@
 # Local Developer AI Guidelines (Developer A & Developer B)
 *SKILL.md
+
+# Dependencies
+/node_modules
+
+# Next.js
+/.next/
+/out/
+
+# TypeScript
+/tsconfig.tsbuildinfo
+
+# Local environment files
+.env*
+!.env.example
