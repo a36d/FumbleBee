@@ -7,19 +7,25 @@ export const NemotronInputSchema = z.object({
 });
 
 export const NemotronAnalysisSchema = z.object({
-  classification: z.string(),
+  threatClassification: z.string(),
   riskScore: z.number().int().min(0).max(100),
   severity: z.enum(['Low', 'Medium', 'High', 'Critical']),
   blastRadius: z.number().int().min(0),
   confidence: z.number().int().min(0).max(100),
-  summary: z.string(),
-  affectedAssets: z.array(z.string()),
-  attackGraphEdges: z.array(z.object({
-    source: z.string(),
-    target: z.string(),
-    relationLabel: z.string(),
-  })),
+  impactSummary: z.string(),
   recommendations: z.array(z.string()),
+  assets: z.array(z.object({
+    id: z.string().min(1),
+    name: z.string(),
+    type: z.enum(['identity', 'share', 'database', 'resource']),
+    description: z.string(),
+    riskLabel: z.enum(['Low', 'Medium', 'High', 'Critical']),
+  })),
+  edges: z.array(z.object({
+    sourceId: z.string().min(1),
+    targetId: z.string().min(1),
+    label: z.string(),
+  })),
 });
 
 export type NemotronInput = z.infer<typeof NemotronInputSchema>;
@@ -41,22 +47,51 @@ export function mockNemotron(input: NemotronInput): NemotronAnalysis {
   const subject = input.title.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').slice(0, 40) || 'subject';
 
   return {
-    classification: isExfiltration ? 'Potential Data Exfiltration' : isPrivilege ? 'Privilege Abuse' : 'Suspicious User Behavior',
+    threatClassification: isExfiltration ? 'Potential Data Exfiltration' : isPrivilege ? 'Privilege Abuse' : 'Suspicious User Behavior',
     riskScore,
     severity,
     blastRadius: isExfiltration ? 6 : 3,
     confidence: isExfiltration ? 92 : 78,
-    summary: `Mock analysis indicates ${isExfiltration ? 'possible data exfiltration activity' : 'suspicious insider activity'} involving ${subject}.`,
-    affectedAssets: ['Identity Center', 'Corporate Endpoint', ...(isExfiltration ? ['Cloud Storage'] : [])],
-    attackGraphEdges: [
-      { source: subject, target: 'Corporate Endpoint', relationLabel: 'accessed' },
-      ...(isExfiltration ? [{ source: 'Corporate Endpoint', target: 'Cloud Storage', relationLabel: 'uploaded sensitive data' }] : []),
-      ...(isPrivilege ? [{ source: subject, target: 'Identity Center', relationLabel: 'abused elevated access' }] : []),
-    ],
+    impactSummary: `Mock analysis indicates ${isExfiltration ? 'possible data exfiltration activity' : 'suspicious insider activity'} involving ${subject}.`,
     recommendations: [
       'Preserve relevant endpoint and identity-center logs.',
       'Revoke active sessions and validate current access controls.',
       'Notify the designated insider-risk response team.',
+    ],
+    assets: [
+      {
+        id: subject,
+        name: subject,
+        type: 'identity',
+        description: 'User identity associated with the suspicious activity.',
+        riskLabel: severity,
+      },
+      {
+        id: 'corporate-endpoint',
+        name: 'Corporate Endpoint',
+        type: 'share',
+        description: 'Managed endpoint involved in the observed activity.',
+        riskLabel: severity,
+      },
+      ...(isExfiltration ? [{
+        id: 'cloud-storage',
+        name: 'Cloud Storage',
+        type: 'database' as const,
+        description: 'External storage destination potentially used for data transfer.',
+        riskLabel: 'Critical' as const,
+      }] : []),
+      ...(isPrivilege ? [{
+        id: 'identity-center',
+        name: 'Identity Center',
+        type: 'resource' as const,
+        description: 'Identity and access management system.',
+        riskLabel: 'High' as const,
+      }] : []),
+    ],
+    edges: [
+      { sourceId: subject, targetId: 'corporate-endpoint', label: 'accessed' },
+      ...(isExfiltration ? [{ sourceId: 'corporate-endpoint', targetId: 'cloud-storage', label: 'uploaded sensitive data' }] : []),
+      ...(isPrivilege ? [{ sourceId: subject, targetId: 'identity-center', label: 'abused elevated access' }] : []),
     ],
   };
 }
@@ -75,31 +110,45 @@ export async function analyzeWithNemotron(
     type: 'object',
     additionalProperties: false,
     properties: {
-      classification: { type: 'string' },
+      threatClassification: { type: 'string' },
       riskScore: { type: 'integer', minimum: 0, maximum: 100 },
       severity: { type: 'string', enum: ['Low', 'Medium', 'High', 'Critical'] },
       blastRadius: { type: 'integer', minimum: 0 },
       confidence: { type: 'integer', minimum: 0, maximum: 100 },
-      summary: { type: 'string' },
-      affectedAssets: { type: 'array', items: { type: 'string' } },
-      attackGraphEdges: {
+      impactSummary: { type: 'string' },
+      recommendations: { type: 'array', items: { type: 'string' } },
+      assets: {
         type: 'array',
         items: {
           type: 'object',
           additionalProperties: false,
           properties: {
-            source: { type: 'string' },
-            target: { type: 'string' },
-            relationLabel: { type: 'string' },
+            id: { type: 'string', minLength: 1 },
+            name: { type: 'string' },
+            type: { type: 'string', enum: ['identity', 'share', 'database', 'resource'] },
+            description: { type: 'string' },
+            riskLabel: { type: 'string', enum: ['Low', 'Medium', 'High', 'Critical'] },
           },
-          required: ['source', 'target', 'relationLabel'],
+          required: ['id', 'name', 'type', 'description', 'riskLabel'],
         },
       },
-      recommendations: { type: 'array', items: { type: 'string' } },
+      edges: {
+        type: 'array',
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            sourceId: { type: 'string', minLength: 1 },
+            targetId: { type: 'string', minLength: 1 },
+            label: { type: 'string' },
+          },
+          required: ['sourceId', 'targetId', 'label'],
+        },
+      },
     },
     required: [
-      'classification', 'riskScore', 'severity', 'blastRadius', 'confidence',
-      'summary', 'affectedAssets', 'attackGraphEdges', 'recommendations',
+      'threatClassification', 'riskScore', 'severity', 'blastRadius', 'confidence',
+      'impactSummary', 'recommendations', 'assets', 'edges',
     ],
   };
 

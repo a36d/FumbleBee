@@ -15,14 +15,18 @@ export async function commitAiAnalysis(
   if (!reducer) throw new Error('Generated applyAiAnalysis reducer binding is not configured');
   await reducer.call({
     incidentId,
-    classification: analysis.classification,
+    classification: analysis.threatClassification,
     riskScore: analysis.riskScore,
     severity: analysis.severity,
     blastRadius: analysis.blastRadius,
     confidence: analysis.confidence,
-    summary: analysis.summary,
-    affectedAssets: analysis.affectedAssets,
-    attackGraphEdges: analysis.attackGraphEdges,
+    impactSummary: analysis.impactSummary,
     recommendations: analysis.recommendations,
+    assets: analysis.assets,
+    relationships: analysis.edges.map(edge => ({
+      source: edge.sourceId,
+      target: edge.targetId,
+      relationLabel: edge.label,
+    })),
   });
 }
