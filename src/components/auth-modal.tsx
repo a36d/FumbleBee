@@ -7,9 +7,13 @@ import { tables } from "@/generated/spacetimedb";
 import type { User } from "@/generated/spacetimedb/types";
 import { useSpacetimeConnection } from "@/components/spacetime-connection-provider";
 import { hashPassword } from "@/lib/auth";
+import type { AppRole } from "@/lib/roles";
+import { normalizeRole } from "@/lib/roles";
+import { useRouter } from "next/navigation";
 
-const responderRoles = ["Employee", "Admin"] as const;
-type ResponderRole = (typeof responderRoles)[number];
+const responderRoles: AppRole[] = ["Admin", "Employee"];
+
+type ResponderRole = AppRole;
 type AssignableRole = ResponderRole;
 type AuthMode = "signin" | "register" | "roles";
 
@@ -38,8 +42,8 @@ function withTimeout<T>(operation: Promise<T>, timeoutMs = 5000): Promise<T> {
 }
 
 const roleDescriptions: Record<ResponderRole, string> = {
-  Employee: "Investigate incidents and contribute incident evidence.",
-  Admin: "Manage company members, roles, and incident response.",
+  Admin: "View all incidents, manage responders, and coordinate incident response.",
+  Employee: "View and work incidents assigned to your account.",
 };
 
 function isResponderRole(value: unknown): value is ResponderRole {
@@ -47,40 +51,19 @@ function isResponderRole(value: unknown): value is ResponderRole {
 }
 
 function reducerRole(role: AssignableRole): string {
-  switch (role) {
-    case "Admin": return "Admin";
-    case "Employee": return "Employee";
-  }
+  return role;
 }
 
 function displayRole(role: string): string {
-  switch (role) {
-    case "Admin":
-    case "admin": return "Admin";
-    case "Employee":
-    case "employee":
-    case "investigator":
-    case "commander":
-    case "legal":
-    case "viewer": return "Employee";
-    default: return "Employee";
-  }
+  return normalizeRole(role);
 }
 
 function responderRoleFromDatabase(role: string): ResponderRole {
-  switch (role) {
-    case "Admin":
-    case "admin": return "Admin";
-    default: return "Employee";
-  }
+  return normalizeRole(role);
 }
 
 function compactRole(role: string): string {
-  switch (role) {
-    case "Admin":
-    case "admin": return "Admin";
-    default: return "Employee";
-  }
+  return normalizeRole(role);
 }
 
 function isSavedResponderSession(value: unknown): value is SavedResponderSession {
@@ -98,6 +81,7 @@ function isSavedResponderSession(value: unknown): value is SavedResponderSession
 
 export function AuthModal({ externalOpenToken = 0 }: { externalOpenToken?: number }) {
   const { connection, connectionError, saveSession, switchSession } = useSpacetimeConnection();
+  const router = useRouter();
   const [session, setSession] = useState<ResponderSession | null>(null);
   const [hydrated, setHydrated] = useState(false);
   const [mode, setMode] = useState<AuthMode>("signin");
@@ -111,6 +95,7 @@ export function AuthModal({ externalOpenToken = 0 }: { externalOpenToken?: numbe
   const [targetIdentity, setTargetIdentity] = useState("");
   const [newRole, setNewRole] = useState<AssignableRole>("Employee");
   const [inviteUsername, setInviteUsername] = useState("");
+  const [inviting, setInviting] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -131,7 +116,7 @@ export function AuthModal({ externalOpenToken = 0 }: { externalOpenToken?: numbe
 
   useEffect(() => {
     try {
-      const saved = localStorage.getItem("fumblebee_session");
+      const saved = localStorage.getItem("fumblebee_session") ?? localStorage.getItem("fumblebee_responder");
       if (saved) {
         const parsed: unknown = JSON.parse(saved);
         if (
@@ -140,9 +125,9 @@ export function AuthModal({ externalOpenToken = 0 }: { externalOpenToken?: numbe
           "username" in parsed &&
           typeof parsed.username === "string" &&
           "role" in parsed &&
-          isResponderRole(parsed.role)
+          typeof parsed.role === "string"
         ) {
-          setSession({ username: parsed.username, role: parsed.role });
+          setSession({ username: parsed.username, role: normalizeRole(parsed.role) });
         }
       }
       const savedSessionsValue: unknown = JSON.parse(localStorage.getItem("fumblebee_responder_sessions") ?? "[]");
@@ -199,11 +184,142 @@ export function AuthModal({ externalOpenToken = 0 }: { externalOpenToken?: numbe
 
   async function submitSession(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const cleanUsername = username.trim();
+    const formData = { name: username, role };
+    const registering = mode === "register";
+    const newResponder = registering
+      ? {
+          name: formData.name.trim(),
+          role: formData.role || "Employee",
+          timestamp: Date.now(),
+        }
+      : null;
+    const cleanUsername = (newResponder?.name ?? formData.name.trim());
+
     if (!cleanUsername || !password) {
       setError("Enter a username and password to continue.");
       return;
     }
+
+    if (registering && newResponder?.role === "Admin") {
+      if (!connection) {
+        setError(connectionError || "Admin registration requires a verified SpacetimeDB connection.");
+        return;
+      }
+      setSubmitting(true);
+      setError("");
+      setNotice("");
+      try {
+        const passwordHash = await hashPassword(password);
+        await withTimeout(connection.reducers.signUp({
+          username: newResponder.name,
+          passwordHash,
+          role: "Admin",
+        }));
+        const nextSession = { username: newResponder.name, role: newResponder.role };
+        try {
+          saveSession(nextSession);
+          localStorage.setItem("fumblebee_active_responder", JSON.stringify(nextSession));
+        } catch (storageError) {
+          setNotice(storageError instanceof Error ? storageError.message : "Admin account created, but the session could not be saved.");
+        }
+        setSession(nextSession);
+        setOpen(false);
+        setUsername("");
+        setPassword("");
+        router.replace("/");
+      } catch (registrationError) {
+        setError(registrationError instanceof Error ? registrationError.message : "Admin registration failed.");
+      } finally {
+        setSubmitting(false);
+      }
+      return;
+    }
+
+    if (registering && newResponder) {
+      setSubmitting(true);
+      setError("");
+      setNotice("");
+      const nextSession = { username: newResponder.name, role: newResponder.role };
+      let responderStored = false;
+
+      try {
+        const savedRespondersValue: unknown = JSON.parse(localStorage.getItem("fumblebee_local_responders") ?? "[]");
+        const savedResponders = Array.isArray(savedRespondersValue)
+          ? savedRespondersValue.filter((responder): responder is typeof newResponder => (
+              Boolean(
+                responder &&
+                typeof responder === "object" &&
+                "name" in responder &&
+                typeof responder.name === "string" &&
+                "role" in responder &&
+                typeof responder.role === "string" &&
+                "timestamp" in responder &&
+                typeof responder.timestamp === "number"
+              )
+            ))
+          : [];
+        localStorage.setItem(
+          "fumblebee_local_responders",
+          JSON.stringify([
+            ...savedResponders.filter((responder) => responder.name.toLowerCase() !== newResponder.name.toLowerCase()),
+            newResponder,
+          ]),
+        );
+        responderStored = true;
+      } catch {
+        setNotice("Browser storage is unavailable; responder is active for this session only.");
+      }
+
+      try {
+        saveSession(nextSession);
+      } catch {
+        try {
+          localStorage.setItem("fumblebee_session", JSON.stringify(nextSession));
+        } catch {
+          setNotice("Responder is active for this session only; browser storage is unavailable.");
+        }
+      }
+      try {
+        localStorage.setItem("fumblebee_active_responder", JSON.stringify(nextSession));
+        const savedSessionsValue: unknown = JSON.parse(localStorage.getItem("fumblebee_responder_sessions") ?? "[]");
+        setSavedSessions(Array.isArray(savedSessionsValue) ? savedSessionsValue.filter(isSavedResponderSession) : []);
+      } catch {
+        setNotice("Responder is active for this session, but browser storage is unavailable.");
+      }
+      setSession(nextSession);
+      setOpen(false);
+      setUsername("");
+      setPassword("");
+      setSubmitting(false);
+      router.replace(newResponder.role === "Employee" ? "/personal-incidents" : "/");
+
+      if (!connection) {
+        setNotice(
+          responderStored
+            ? `Responder ${newResponder.name} is saved on this device. Connect to SpacetimeDB to register centrally.`
+            : `Responder ${newResponder.name} is active for this session only; browser storage is unavailable.`,
+        );
+        return;
+      }
+
+      const localRegistrationNotice = responderStored
+        ? `Responder ${newResponder.name} is saved on this device`
+        : `Responder ${newResponder.name} is active for this session only`;
+      setNotice(`${localRegistrationNotice}; completing SpacetimeDB registration...`);
+      void hashPassword(password)
+        .then((passwordHash) => withTimeout(connection.reducers.signUp({
+          username: newResponder.name,
+          passwordHash,
+          role: reducerRole(newResponder.role),
+        })))
+        .then(() => setNotice(`Responder ${newResponder.name} is registered with SpacetimeDB.`))
+        .catch((registrationError: unknown) => {
+          const reason = registrationError instanceof Error ? registrationError.message : "SpacetimeDB registration failed.";
+          setNotice(`${localRegistrationNotice}, but central registration failed: ${reason}`);
+        });
+      return;
+    }
+
     if (!connection) {
       setError(connectionError || "SpacetimeDB is not connected. Try again when the connection is restored.");
       return;
@@ -214,29 +330,15 @@ export function AuthModal({ externalOpenToken = 0 }: { externalOpenToken?: numbe
     setNotice("");
     try {
       const passwordHash = await hashPassword(password);
-      let nextRole: ResponderRole;
-      if (mode === "signin") {
-        const existingUser = Array.from(connection.db.user.iter())
-          .find((user) => user.username === cleanUsername);
-        await withTimeout(connection.reducers.signIn({
-          username: cleanUsername,
-          passwordHash,
-        }));
-        const authenticatedUser = Array.from(connection.db.user.iter())
-          .find((user) => user.username === cleanUsername);
-        nextRole = responderRoleFromDatabase(authenticatedUser?.role ?? existingUser?.role ?? "");
-      } else {
-        const registrationDispatch = connection.reducers.signUp({
-          username: cleanUsername,
-          passwordHash,
-          role: reducerRole(role),
-        });
-        void Promise.resolve(registrationDispatch).catch((registrationError) => {
-          setError(registrationError instanceof Error ? registrationError.message : "Responder registration failed.");
-        });
-        nextRole = role;
-      }
-
+      const existingUser = Array.from(connection.db.user.iter())
+        .find((user) => user.username === cleanUsername);
+      await withTimeout(connection.reducers.signIn({
+        username: cleanUsername,
+        passwordHash,
+      }));
+      const authenticatedUser = Array.from(connection.db.user.iter())
+        .find((user) => user.username === cleanUsername);
+      const nextRole = responderRoleFromDatabase(authenticatedUser?.role ?? existingUser?.role ?? "");
       const nextSession = { username: cleanUsername, role: nextRole };
       try {
         saveSession(nextSession);
@@ -251,9 +353,9 @@ export function AuthModal({ externalOpenToken = 0 }: { externalOpenToken?: numbe
       setUsername("");
       setPassword("");
       setError("");
-      if (mode === "register") setNotice(`Responder ${cleanUsername} registered successfully.`);
+      router.replace(nextRole === "Employee" ? "/personal-incidents" : "/");
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : mode === "signin" ? "Sign in failed." : "Responder registration failed.");
+      setError(submitError instanceof Error ? submitError.message : "Sign in failed.");
     } finally {
       setSubmitting(false);
     }
@@ -311,31 +413,33 @@ export function AuthModal({ externalOpenToken = 0 }: { externalOpenToken?: numbe
     }
   }
 
-  async function inviteMember(event: React.FormEvent<HTMLFormElement>) {
+  async function inviteEmployee(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!connection) {
-      setError(connectionError || "SpacetimeDB is not connected.");
-      return;
-    }
+    const cleanInviteUsername = inviteUsername.trim();
     if (session?.role !== "Admin") {
-      setError("Only authenticated Admin users can invite company members.");
+      setError("Only an Admin can invite employees.");
       return;
     }
-    const username = inviteUsername.trim();
-    if (!username) {
-      setError("Enter the username of an existing account.");
+    if (!connection) {
+      setError(connectionError || "SpacetimeDB is not connected. Try again when the connection is restored.");
       return;
     }
-    setSubmitting(true);
+    if (!cleanInviteUsername) {
+      setError("Enter the employee username to invite.");
+      return;
+    }
+
+    setInviting(true);
     setError("");
+    setNotice("");
     try {
-      await withTimeout(connection.reducers.inviteMember({ username }));
+      await withTimeout(connection.reducers.inviteEmployee({ username: cleanInviteUsername }));
       setInviteUsername("");
-      setNotice(`${username} was added to the company workspace as Employee.`);
+      setNotice(`Invitation created for ${cleanInviteUsername}.`);
     } catch (inviteError) {
-      setError(inviteError instanceof Error ? inviteError.message : "Company invite failed.");
+      setError(inviteError instanceof Error ? inviteError.message : "Employee invitation failed.");
     } finally {
-      setSubmitting(false);
+      setInviting(false);
     }
   }
 
@@ -350,9 +454,11 @@ export function AuthModal({ externalOpenToken = 0 }: { externalOpenToken?: numbe
           </span>
           {session && <span className="responder-role-chip">{compactRole(session.role)}</span>}
         </button>
-        <button className="responder-admin-trigger" onClick={() => openModal("roles")}>
-          Admin: Manage Roles / Add User
-        </button>
+        {session?.role === "Admin" && (
+          <button className="responder-admin-trigger" onClick={() => openModal("roles")}>
+            Admin: Manage Roles / Invite Employee
+          </button>
+        )}
       </div>
       {notice && <p className="auth-success-notice" role="status">{notice}</p>}
 
@@ -402,51 +508,54 @@ export function AuthModal({ externalOpenToken = 0 }: { externalOpenToken?: numbe
                 </div>
                 {session?.role === "Admin" ? (
                   <>
-                <form className="auth-role-form auth-invite-form" onSubmit={inviteMember}>
-                  <label>
-                    Invite existing account
-                    <input
-                      value={inviteUsername}
-                      onChange={(event) => setInviteUsername(event.target.value)}
-                      placeholder="Username"
-                      autoComplete="off"
-                    />
-                  </label>
-                  <button className="button button-primary" type="submit" disabled={submitting || !connection}>
-                    {submitting ? "Inviting..." : "Invite to Acme Corporation"}
-                  </button>
-                </form>
-                <form className="auth-role-form" onSubmit={assignRole}>
-                  <label>
-                    Responder account
-                    <select value={targetIdentity} onChange={(event) => setTargetIdentity(event.target.value)} required>
-                      <option value="">Select a registered account</option>
-                      {users.map((user) => (
-                        <option key={user.identity.toHexString()} value={user.identity.toHexString()}>
-                          {user.username} · {displayRole(user.role)}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label>
-                    Assign role
-                    <select value={newRole} onChange={(event) => setNewRole(event.target.value as AssignableRole)}>
-                      <option>Employee</option>
-                      <option>Admin</option>
-                    </select>
-                  </label>
-                  <button className="button button-primary" type="submit" disabled={submitting || !connection}>
-                    {submitting ? "Updating role..." : "Assign Role"}
-                  </button>
-                </form>
-                <p className="auth-demo-notice">Role changes are authorized by the SpacetimeDB admin-only reducer.</p>
+                    <form className="auth-role-form" onSubmit={assignRole}>
+                      <label>
+                        Responder account
+                        <select value={targetIdentity} onChange={(event) => setTargetIdentity(event.target.value)} required>
+                          <option value="">Select a registered account</option>
+                          {users.map((user) => (
+                            <option key={user.identity.toHexString()} value={user.identity.toHexString()}>
+                              {user.username} · {displayRole(user.role)}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label>
+                        Assign role
+                        <select value={newRole} onChange={(event) => setNewRole(event.target.value as AssignableRole)}>
+                          {responderRoles.map((responderRole) => <option key={responderRole}>{responderRole}</option>)}
+                        </select>
+                      </label>
+                      <button className="button button-primary" type="submit" disabled={submitting || !connection}>
+                        {submitting ? "Updating role..." : "Assign Role"}
+                      </button>
+                    </form>
+                    <p className="auth-demo-notice">Role changes and employee invitations are validated by Admin-only SpacetimeDB reducers.</p>
+                    <form className="auth-role-form" onSubmit={inviteEmployee}>
+                      <label>
+                        Invite Employee
+                        <input
+                          value={inviteUsername}
+                          onChange={(event) => setInviteUsername(event.target.value)}
+                          autoComplete="off"
+                          minLength={3}
+                          maxLength={64}
+                          pattern="[A-Za-z0-9._-]+"
+                          placeholder="Existing username"
+                          required
+                        />
+                      </label>
+                      <button className="button button-primary" type="submit" disabled={inviting || !connection}>
+                        {inviting ? "Creating invitation..." : "Invite Employee"}
+                      </button>
+                    </form>
                   </>
                 ) : (
                   <p className="auth-demo-notice">Only Admin users can invite members or assign roles.</p>
                 )}
                 <div className="auth-active-roster">
                   <span className="summary-label">ACME CORPORATION - ACTIVE RESPONDERS</span>
-                  {users.length > 0 ? (
+                  {session?.role === "Admin" && users.length > 0 ? (
                     <div className="auth-role-list">
                       {users.map((user) => (
                         <article key={user.identity.toHexString()}>
@@ -456,7 +565,7 @@ export function AuthModal({ externalOpenToken = 0 }: { externalOpenToken?: numbe
                       ))}
                     </div>
                   ) : (
-                    <p className="auth-demo-notice">No registered responders are available yet.</p>
+                    <p className="auth-demo-notice">{session?.role === "Admin" ? "No registered responders are available yet." : "Responder roster is available to Admins."}</p>
                   )}
                 </div>
                 <div className="auth-role-list">
@@ -467,7 +576,7 @@ export function AuthModal({ externalOpenToken = 0 }: { externalOpenToken?: numbe
                     </article>
                   ))}
                 </div>
-                <button className="button button-primary" onClick={() => { setMode("register"); setError(""); }}>Add User / Register Responder</button>
+                <button className="button button-primary" onClick={() => { setMode("register"); setError(""); }}>Register Responder</button>
               </div>
             ) : (
               <form className="modal-form auth-form" onSubmit={submitSession}>
@@ -485,11 +594,11 @@ export function AuthModal({ externalOpenToken = 0 }: { externalOpenToken?: numbe
                     <input value="Employee" readOnly />
                   </label>
                 )}
-                <p className="auth-demo-notice">{mode === "register" ? "Registration hashes the password with SHA-256 before sending it to the SpacetimeDB sign-up reducer." : "Your password is hashed with SHA-256 and verified by SpacetimeDB."}</p>
+                <p className="auth-demo-notice">{mode === "register" ? "Employee registration requires an Admin invitation. Only the first responder account can claim Admin access." : "Your password is hashed with SHA-256 and verified by SpacetimeDB."}</p>
                 {(error || connectionError) && <p className="auth-error" role="alert">{error || connectionError}</p>}
                 <div className="modal-actions">
                   {session && <button className="button button-secondary" type="button" onClick={signOut}>Sign out</button>}
-                  <button className="button button-primary" type="submit" disabled={submitting || !connection}>
+                  <button className="button button-primary" type="submit" disabled={submitting || (mode === "signin" && !connection)}>
                     {submitting ? mode === "register" ? "Registering..." : "Signing in..." : mode === "register" ? "Register Responder" : "Sign In"}
                   </button>
                 </div>

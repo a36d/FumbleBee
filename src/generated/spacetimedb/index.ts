@@ -35,6 +35,7 @@ import {
 
 // Import all reducer arg schemas
 import AddInvestigationNoteReducer from "./add_investigation_note_reducer";
+import AssignIncidentReducer from "./assign_incident_reducer";
 import ApplyAiAnalysisReducer from "./apply_ai_analysis_reducer";
 import ApplyAssetContainmentReducer from "./apply_asset_containment_reducer";
 import AssignUserRoleReducer from "./assign_user_role_reducer";
@@ -43,6 +44,7 @@ import CreateIncidentReducer from "./create_incident_reducer";
 import CreateUserReducer from "./create_user_reducer";
 import DeleteUserReducer from "./delete_user_reducer";
 import InviteMemberReducer from "./invite_member_reducer";
+import InviteEmployeeReducer from "./invite_employee_reducer";
 import SetUserRoleReducer from "./set_user_role_reducer";
 import SignInReducer from "./sign_in_reducer";
 import SignUpReducer from "./sign_up_reducer";
@@ -60,6 +62,7 @@ import IncidentRow from "./incident_table";
 import InvestigationNoteRow from "./investigation_note_table";
 import RelationshipRow from "./relationship_table";
 import UserRow from "./user_table";
+import ResponderInvitationRow from "./responder_invitation_table";
 
 /** Type-only namespace exports for generated type groups. */
 
@@ -157,11 +160,22 @@ const tablesSchema = __schema({
       { name: 'User_identity_key', constraint: 'unique', columns: ['identity'] },
     ],
   }, UserRow),
+  responderInvitation: __table({
+    name: 'ResponderInvitation',
+    indexes: [
+      { accessor: 'id', name: 'ResponderInvitation_id_idx_btree', algorithm: 'btree', columns: ['id'] },
+      { accessor: 'username', name: 'ResponderInvitation_username_idx_btree', algorithm: 'btree', columns: ['username'] },
+    ],
+    constraints: [
+      { name: 'ResponderInvitation_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, ResponderInvitationRow),
 });
 
 /** The schema information for all reducers in this module. This is defined the same way as the reducers would have been defined in the server, except the body of the reducer is omitted in code generation. */
 const reducersSchema = __reducers(
   __reducerSchema("add_investigation_note", AddInvestigationNoteReducer),
+  __reducerSchema("assign_incident", AssignIncidentReducer),
   __reducerSchema("apply_ai_analysis", ApplyAiAnalysisReducer),
   __reducerSchema("apply_asset_containment", ApplyAssetContainmentReducer),
   __reducerSchema("assign_user_role", AssignUserRoleReducer),
@@ -170,6 +184,7 @@ const reducersSchema = __reducers(
   __reducerSchema("create_user", CreateUserReducer),
   __reducerSchema("delete_user", DeleteUserReducer),
   __reducerSchema("invite_member", InviteMemberReducer),
+  __reducerSchema("invite_employee", InviteEmployeeReducer),
   __reducerSchema("set_user_role", SetUserRoleReducer),
   __reducerSchema("sign_in", SignInReducer),
   __reducerSchema("sign_up", SignUpReducer),

@@ -38,6 +38,17 @@ const incident = table(
     recommendations: t.string(),
     createdBy: t.identity(),
     owner: t.string().default(''),
+    assignedTo: t.string().default(''),
+    createdAt: t.timestamp(),
+  },
+);
+
+const responderInvitation = table(
+  { name: 'ResponderInvitation', public: true },
+  {
+    id: t.u64().primaryKey().autoInc(),
+    username: t.string().index('btree'),
+    invitedBy: t.identity(),
     createdAt: t.timestamp(),
   },
 );
@@ -105,6 +116,7 @@ const auditLog = table(
 
 const spacetime = schema({
   user,
+  responderInvitation,
   incident,
   asset,
   relationship,
@@ -114,6 +126,10 @@ const spacetime = schema({
 });
 
 type Role = 'Admin' | 'Employee';
+
+function canonicalRole(role: string): Role {
+  return role === 'Admin' || role === 'admin' ? 'Admin' : 'Employee';
+}
 
 function defaultEmail(value: string): string {
   const localPart = value
@@ -151,16 +167,12 @@ function requireRole(ctx: any, allowed: Role[]) {
       createdAt: ctx.timestamp,
     });
   }
-  const normalizedRole: Role =
-    row.role === 'Admin' || row.role === 'admin'
-      ? 'Admin'
-      : 'Employee';
-  if (normalizedRole !== row.role) {
+  const role = canonicalRole(row.role);
+  if (row.role !== role) {
     ctx.db.user.identity.delete(ctx.sender);
-    ctx.db.user.insert({ ...row, role: normalizedRole });
-    row = ctx.db.user.identity.find(ctx.sender);
+    row = ctx.db.user.insert({ ...row, role });
   }
-  if (!allowed.includes(normalizedRole)) {
+  if (!allowed.includes(role)) {
     throw new SenderError('Permission denied');
   }
   return row;
@@ -257,17 +269,7 @@ function sha256(message: string): string {
 }
 
 export const init = spacetime.init((ctx: any) => {
-  if (!ctx.db.user.identity.find(ctx.sender)) {
-    ctx.db.user.insert({
-      identity: ctx.sender,
-      name: 'Administrator',
-      email: 'admin@fumblebee.local',
-      username: 'administrator',
-      passwordHash: '',
-      role: 'Admin',
-      createdAt: ctx.timestamp,
-    });
-  }
+  void ctx;
 });
 
 export const createUser = spacetime.reducer(
@@ -296,17 +298,31 @@ export const createUser = spacetime.reducer(
 export const signUp = spacetime.reducer(
   { username: t.string(), passwordHash: t.string(), role: t.string() },
   (ctx: any, args: any) => {
-    // Public registration always starts as Employee; only an Admin reducer
-    // may promote an existing account.
-    const role = 'Employee';
     const username = args.username.trim();
+    const requestedRole = canonicalRole(args.role);
     if (!username) throw new SenderError('Username is required');
     if (!args.passwordHash) throw new SenderError('Password hash is required');
-    if (ctx.db.user.identity.find(ctx.sender)) throw new SenderError('User already registered');
-    for (const userRow of ctx.db.user.iter()) {
-      if (userRow.username === username) throw new SenderError('Username already exists');
+    const currentUser = ctx.db.user.identity.find(ctx.sender);
+    if (currentUser && !currentUser.username.startsWith('soc-')) {
+      throw new SenderError('User already registered');
     }
-    ctx.db.user.insert({
+    for (const userRow of ctx.db.user.iter()) {
+      if (userRow.username.toLowerCase() === username.toLowerCase() && !userRow.identity.isEqual(ctx.sender)) {
+        throw new SenderError('Username already exists');
+      }
+    }
+    let invitation: any = null;
+    const role: Role = requestedRole;
+    if (role === 'Admin') {
+      if (Array.from(ctx.db.user.iter()).some((row: any) => canonicalRole(row.role) === 'Admin')) {
+        throw new SenderError('An administrator account already exists');
+      }
+    } else {
+      invitation = Array.from(ctx.db.responderInvitation.iter())
+        .find((row: any) => row.username.toLowerCase() === username.toLowerCase());
+      if (!invitation) throw new SenderError('An administrator invitation is required to register this username');
+    }
+    const newUser = {
       identity: ctx.sender,
       name: username,
       email: defaultEmail(username),
@@ -314,7 +330,14 @@ export const signUp = spacetime.reducer(
       passwordHash: args.passwordHash,
       role,
       createdAt: ctx.timestamp,
-    });
+    };
+    if (currentUser) {
+      ctx.db.user.identity.delete(ctx.sender);
+      ctx.db.user.insert({ ...currentUser, ...newUser });
+    } else {
+      ctx.db.user.insert(newUser);
+    }
+    if (invitation) ctx.db.responderInvitation.id.delete(invitation.id);
     appendAudit(ctx, `USER_REGISTERED: [${username}] as [${role}]`, null);
   },
 );
@@ -322,20 +345,50 @@ export const signUp = spacetime.reducer(
 export const inviteMember = spacetime.reducer(
   { username: t.string() },
   (ctx: any, args: any) => {
-    requireRole(ctx as any, ['Admin']);
+    const inviter = requireRole(ctx as any, ['Admin']);
     const username = args.username.trim();
-    if (!username) throw new SenderError('Username is required');
-    let target: any = null;
-    for (const userRow of ctx.db.user.iter()) {
-      if (userRow.username === username) {
-        target = userRow;
-        break;
+    if (!/^[a-zA-Z0-9._-]{3,64}$/.test(username)) throw new SenderError('Invalid username');
+    const existing = Array.from(ctx.db.user.iter())
+      .find((row: any) => row.username.toLowerCase() === username.toLowerCase());
+    if (existing) throw new SenderError('A responder with this username already exists');
+    for (const invitation of ctx.db.responderInvitation.iter()) {
+      if (invitation.username.toLowerCase() === username.toLowerCase()) {
+        throw new SenderError('An invitation for this username is already pending');
       }
     }
-    if (!target) throw new SenderError('Account not found');
-    ctx.db.user.identity.delete(target.identity);
-    ctx.db.user.insert({ ...target, role: 'Employee' });
-    appendAudit(ctx, `COMPANY_MEMBER_INVITED: [${username}] as [Employee]`, null);
+    ctx.db.responderInvitation.insert({
+      id: 0n,
+      username,
+      invitedBy: ctx.sender,
+      createdAt: ctx.timestamp,
+    });
+    appendAudit(ctx, `EMPLOYEE_INVITED: [${username}] by [${inviter.username}]`, null);
+  },
+);
+
+export const inviteEmployee = spacetime.reducer(
+  { username: t.string() },
+  (ctx: any, args: any) => {
+    const inviter = requireRole(ctx as any, ['Admin']);
+    const username = args.username.trim();
+    if (!/^[a-zA-Z0-9._-]{3,64}$/.test(username)) throw new SenderError('Username must be 3-64 letters, numbers, dots, underscores, or hyphens');
+    for (const userRow of ctx.db.user.iter()) {
+      if (userRow.username.toLowerCase() === username.toLowerCase()) {
+        throw new SenderError('A responder with this username already exists');
+      }
+    }
+    for (const invitation of ctx.db.responderInvitation.iter()) {
+      if (invitation.username.toLowerCase() === username.toLowerCase()) {
+        throw new SenderError('An invitation for this username is already pending');
+      }
+    }
+    ctx.db.responderInvitation.insert({
+      id: 0n,
+      username,
+      invitedBy: ctx.sender,
+      createdAt: ctx.timestamp,
+    });
+    appendAudit(ctx, `EMPLOYEE_INVITED: [${username}] by [${inviter.username}]`, null);
   },
 );
 
@@ -482,6 +535,7 @@ export const createIncident = spacetime.reducer(
       recommendations: '[]',
       createdBy: ctx.sender,
       owner: actor.username,
+      assignedTo: actor.username,
       createdAt: ctx.timestamp,
     });
     const initialNotes = args.initialNotes.trim();
@@ -502,22 +556,21 @@ export const createIncident = spacetime.reducer(
 );
 
 export const assignIncident = spacetime.reducer(
-  { incidentId: t.u64(), owner: t.string() },
+  { incidentId: t.u64(), assigneeUsername: t.string() },
   (ctx: any, args: any) => {
-    requireRole(ctx as any, ['Admin', 'Employee']);
-    const owner = args.owner.trim();
-    if (!owner) throw new SenderError('Owner username is required');
-    let ownerExists = false;
-    for (const userRow of ctx.db.user.iter()) {
-      if (userRow.username === owner) ownerExists = true;
+    const actor = requireRole(ctx as any, ['Admin']);
+    const assigneeUsername = args.assigneeUsername.trim();
+    const assignee: any = Array.from(ctx.db.user.iter())
+      .find((row: any) => row.username.toLowerCase() === assigneeUsername.toLowerCase());
+    if (!assignee || canonicalRole(assignee.role) !== 'Employee') {
+      throw new SenderError('Choose a registered Employee account');
     }
-    if (!ownerExists) throw new SenderError('Owner account not found');
-    const incident = ctx.db.incident.id.find(args.incidentId);
-    if (!incident) throw new SenderError('Incident not found');
+    const existing = ctx.db.incident.id.find(args.incidentId);
+    if (!existing) throw new SenderError('Incident not found');
     ctx.db.incident.id.delete(args.incidentId);
-    ctx.db.incident.insert({ ...incident, owner });
-    addActivity(ctx, args.incidentId, owner, 'Incident Assigned');
-    appendAudit(ctx, `INCIDENT_ASSIGNED: [${args.incidentId}] -> [${owner}]`, args.incidentId);
+    ctx.db.incident.insert({ ...existing, owner: assignee.username, assignedTo: assignee.username });
+    addActivity(ctx, args.incidentId, actor.name, `Incident assigned to ${assignee.username}`);
+    appendAudit(ctx, `INCIDENT_ASSIGNED: [${args.incidentId}] -> [${assignee.username}]`, args.incidentId);
   },
 );
 

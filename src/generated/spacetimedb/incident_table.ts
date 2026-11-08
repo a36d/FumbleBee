@@ -30,5 +30,6 @@ export default __t.row({
   recommendations: __t.string(),
   createdBy: __t.identity().name("created_by"),
   owner: __t.string(),
+  assignedTo: __t.string().name("assigned_to"),
   createdAt: __t.timestamp().name("created_at"),
 });

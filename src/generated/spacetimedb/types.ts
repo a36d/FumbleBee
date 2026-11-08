@@ -62,9 +62,18 @@ export const Incident = __t.object("Incident", {
   recommendations: __t.string(),
   createdBy: __t.identity(),
   owner: __t.string(),
+  assignedTo: __t.string(),
   createdAt: __t.timestamp(),
 });
 export type Incident = __Infer<typeof Incident>;
+
+export const ResponderInvitation = __t.object("ResponderInvitation", {
+  id: __t.u64(),
+  username: __t.string(),
+  invitedBy: __t.identity(),
+  createdAt: __t.timestamp(),
+});
+export type ResponderInvitation = __Infer<typeof ResponderInvitation>;
 
 export const InvestigationNote = __t.object("InvestigationNote", {
   id: __t.u64(),

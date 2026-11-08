@@ -15,6 +15,7 @@ interface SpacetimeConnectionContextValue {
   connection: DbConnection | null;
   connectionError: string;
   responderSession: ResponderSessionProfile | null;
+  sessionLoaded: boolean;
   saveSession: (profile: ResponderSessionProfile) => void;
   switchSession: (profile: ResponderSessionProfile) => void;
 }
@@ -39,7 +40,7 @@ function readSavedToken(): string | undefined {
 
 function readSavedProfile(): ResponderSessionProfile | null {
   try {
-    const saved = localStorage.getItem(sessionStorageKey);
+    const saved = localStorage.getItem(sessionStorageKey) ?? localStorage.getItem("fumblebee_responder");
     if (!saved) return null;
     const parsed: unknown = JSON.parse(saved);
     if (
@@ -64,9 +65,11 @@ export function SpacetimeConnectionProvider({ children }: { children: React.Reac
   const [connectionError, setConnectionError] = useState("");
   const [authToken, setAuthToken] = useState<string | null>(null);
   const [responderSession, setResponderSession] = useState<ResponderSessionProfile | null>(null);
+  const [sessionLoaded, setSessionLoaded] = useState(false);
 
   useEffect(() => {
     setResponderSession(readSavedProfile());
+    setSessionLoaded(true);
   }, []);
 
   useEffect(() => {
@@ -111,12 +114,10 @@ export function SpacetimeConnectionProvider({ children }: { children: React.Reac
   }, []);
 
   function saveSession(profile: ResponderSessionProfile) {
-    if (!authToken) {
-      throw new Error("SpacetimeDB has not issued a responder session token.");
-    }
-    const savedProfile = { ...profile, token: authToken };
-    localStorage.setItem(sessionStorageKey, JSON.stringify(savedProfile));
+    const savedProfile = authToken ? { ...profile, token: authToken } : profile;
     setResponderSession({ username: profile.username, role: profile.role });
+    localStorage.setItem(sessionStorageKey, JSON.stringify(savedProfile));
+    if (!authToken) return;
     const storedSessions = localStorage.getItem(responderSessionsStorageKey);
     const sessions: ResponderSessionProfile[] = storedSessions ? JSON.parse(storedSessions) as ResponderSessionProfile[] : [];
     const updatedSessions = [
@@ -136,7 +137,7 @@ export function SpacetimeConnectionProvider({ children }: { children: React.Reac
   }
 
   return (
-    <SpacetimeConnectionContext.Provider value={{ connection, connectionError, responderSession, saveSession, switchSession }}>
+    <SpacetimeConnectionContext.Provider value={{ connection, connectionError, responderSession, sessionLoaded, saveSession, switchSession }}>
       {children}
     </SpacetimeConnectionContext.Provider>
   );
