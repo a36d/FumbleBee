@@ -432,10 +432,12 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
   return (
     <>
       <div className="investigation-heading">
-        <div className="investigation-heading-copy">
-          <div className="eyebrow"><span className="eyebrow-line" /><Link href="/" className="heading-back-link">All investigations</Link><span className="meta-dot">/</span><span>{incident.id}</span></div>
-          <h1>{incident.title}</h1>
-          <div className="investigation-meta"><span>Subject: <strong>{incident.subjectName}</strong></span><StatusBadge status={incident.status} /><SeverityBadge severity={findings.severity} /></div>
+        <div className="investigation-title-panel">
+          <div className="investigation-heading-copy">
+            <div className="eyebrow"><span className="eyebrow-line" /><Link href="/" className="heading-back-link">All investigations</Link><span className="meta-dot">/</span><span>{incident.id}</span></div>
+            <h1>{incident.title}</h1>
+            <div className="investigation-meta"><span>Subject: <strong>{incident.subjectName}</strong></span><StatusBadge status={incident.status} /><SeverityBadge severity={findings.severity} /></div>
+          </div>
         </div>
         <div className="heading-actions"><button className="button button-secondary" onClick={() => setAuditOpen(true)}>Audit trail</button><button className="button button-reset" onClick={resetDemoState} disabled={resetRunning || analysisRunning}>{resetRunning && <LoaderCircle className="spin" size={15} />}{resetRunning ? "Resetting..." : "Reset Demo"}</button><button className="button button-primary" onClick={runAnalysis} disabled={analysisRunning || resetRunning}>{analysisRunning && <LoaderCircle className="spin" size={16} />}{analysisRunning ? "Analyzing..." : "Run AI analysis"}</button></div>
       </div>

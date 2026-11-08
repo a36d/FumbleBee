@@ -1321,8 +1321,24 @@ body { color: var(--text); }
 }
 
 .investigation-heading {
-  align-items: center;
+  align-items: stretch;
   margin-bottom: 24px;
+  padding: 14px;
+  border: 1px solid #88a9aa;
+  border-left: 4px solid #d5bb52;
+  border-radius: 8px;
+  background: #3c686d;
+  box-shadow: 0 8px 22px rgba(16, 47, 53, .16);
+}
+.investigation-title-panel {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  align-items: center;
+  padding: 5px 14px;
+  border: 1px solid #adbfbd;
+  border-radius: 6px;
+  background: #88a9aa;
 }
 .investigation-heading-copy {
   min-width: 0;
@@ -1330,21 +1346,21 @@ body { color: var(--text); }
 }
 .investigation-heading .eyebrow {
   margin-bottom: 8px;
-  color: #adbfbd;
+  color: #173f45;
 }
 .heading-back-link {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  color: #adbfbd;
+  color: #173f45;
   font-weight: 600;
   transition: color .15s;
 }
-.heading-back-link:hover { color: #e0cb70; }
+.heading-back-link:hover { color: #66571f; }
 .investigation-heading h1 {
   max-width: 850px;
   margin: 0 0 9px;
-  color: #e2eeea;
+  color: #102f35;
   font-size: 24px;
   line-height: 1.25;
   font-weight: 700;
@@ -1355,23 +1371,33 @@ body { color: var(--text); }
   align-items: center;
   gap: 9px;
   margin: 0;
-  color: #adbfbd;
+  color: #28585e;
   font-size: 11px;
 }
-.investigation-meta strong { color: #e2eeea; font-weight: 600; }
+.investigation-meta strong { color: #102f35; font-weight: 700; }
 .investigation-meta .severity-badge,
 .investigation-meta .status-badge { font-size: 9px; }
-.heading-actions { flex: 0 0 auto; align-self: center; }
+.heading-actions {
+  flex: 0 0 auto;
+  align-self: center;
+  padding: 8px;
+  border: 1px solid rgba(136, 169, 170, .28);
+  border-radius: 7px;
+  background: rgba(16, 47, 53, .42);
+}
 
 @media (max-width: 900px) {
-  .investigation-heading { align-items: flex-start; }
-  .investigation-heading-copy { width: 100%; }
+  .investigation-heading { align-items: stretch; }
+  .investigation-title-panel { width: 100%; }
   .heading-actions { align-self: stretch; }
 }
 @media (max-width: 650px) {
   .investigation-heading h1 { font-size: 22px; }
   .investigation-meta { flex-wrap: wrap; }
-  .heading-actions { width: 100%; }
+  .investigation-heading { padding: 10px; }
+  .investigation-title-panel { padding: 10px; }
+  .heading-actions { width: 100%; padding: 6px; }
+  .heading-actions .button { flex: 1; }
 }
 
 .responder-controls {
@@ -1558,3 +1584,24 @@ body { color: var(--text); }
   .responder-role-chip { display: none; }
   .responder-admin-trigger { max-width: 92px; padding: 6px; font-size: 8px; }
 }
+
+.severity-low,
+.risk-low,
+.finding-severity.severity-low,
+.impact-tag.severity-low,
+.asset-drawer-risk.risk-low { color: #28666e; }
+.severity-medium,
+.risk-medium,
+.finding-severity.severity-medium,
+.impact-tag.severity-medium,
+.asset-drawer-risk.risk-medium { color: #806b2a; }
+.severity-high,
+.severity-critical,
+.risk-high,
+.risk-critical,
+.finding-severity.severity-high,
+.finding-severity.severity-critical,
+.impact-tag.severity-high,
+.impact-tag.severity-critical,
+.asset-drawer-risk.risk-high,
+.asset-drawer-risk.risk-critical { color: #91353c; }
