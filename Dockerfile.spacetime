@@ -1,0 +1,14 @@
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y curl ca-certificates && rm -rf /var/lib/apt/lists/*
+
+# Install SpacetimeDB non-interactively with -y
+RUN curl -sSf https://install.spacetimedb.com | sh -s -- -y
+
+ENV PATH="/root/.local/bin:/root/.local/share/spacetime/bin:${PATH}"
+
+WORKDIR /app
+EXPOSE 3000
+
+CMD ["spacetime", "start", "--listen-addr", "0.0.0.0:3000"]
