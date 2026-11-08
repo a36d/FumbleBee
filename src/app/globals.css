@@ -47,6 +47,16 @@ a { color: inherit; text-decoration: none; }
 .nav-item:hover { background: #102f35; color: #cbd9d5; }
 .nav-item.active { color: #88a9aa; border-color: rgba(99, 130, 134, .15); background: rgba(60, 104, 109, .12); }
 .nav-count { margin-left: auto; padding: 2px 6px; border: 1px solid #102f35; border-radius: 4px; color: #638286; background: #102f35; font-size: 10px; }
+.investigation-tabs { display: grid; gap: 3px; margin: 0 0 5px 13px; padding-left: 9px; border-left: 1px solid #88a9aa; }
+.investigation-tab { display: flex; align-items: center; min-width: 0; min-height: 32px; border: 1px solid transparent; border-radius: 5px; color: #28585e; }
+.investigation-tab > a { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; height: 30px; padding-left: 7px; color: inherit; font-size: 10px; }
+.investigation-tab > a:hover { color: #173f45; }
+.investigation-tab-id { flex: 0 0 auto; color: #638286; font-size: 9px; font-variant-numeric: tabular-nums; }
+.investigation-tab-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.investigation-tab > button { display: grid; flex: 0 0 auto; place-items: center; width: 25px; height: 25px; margin-right: 3px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: #638286; cursor: pointer; }
+.investigation-tab > button:hover { background: rgba(145, 53, 60, .12); color: #91353c; }
+.investigation-tab.active { border-color: rgba(185, 151, 53, .42); background: rgba(213, 187, 82, .2); color: #173f45; }
+.investigation-tab.active .investigation-tab-id { color: #806b2a; }
 .sidebar-bottom { margin-top: auto; }
 .system-status { display: flex; align-items: flex-start; gap: 9px; margin: 0 3px 14px; padding: 11px 9px; border: 1px solid #102f35; border-radius: 6px; background: #102f35; }
 .status-dot { flex: 0 0 auto; width: 7px; height: 7px; margin-top: 3px; border-radius: 50%; background: var(--mint); box-shadow: 0 0 9px rgba(136, 169, 170, .56); }
@@ -229,11 +239,12 @@ tbody tr:hover { background: rgba(203, 217, 213, .015); }
 .graph-canvas .react-flow__controls-button:hover { background: #102f35; }
 .graph-canvas .react-flow__controls-button svg { fill: currentColor; }
 .graph-canvas .react-flow__minimap { overflow: hidden; border: 1px solid #102f35; border-radius: 5px; background: #102f35; }
+.graph-canvas .react-flow__minimap.attack-graph-minimap { width: 150px; height: 104px; }
 .graph-canvas .react-flow__handle { width: 6px; height: 6px; border: 1px solid #638286; background: #102f35; }
 .graph-status { position: absolute; z-index: 4; top: 13px; left: 15px; display: flex; align-items: center; gap: 7px; padding: 6px 8px; border: 1px solid #102f35; border-radius: 4px; background: rgba(16, 47, 53, .92); color: #95b0b0; font-size: 8px; letter-spacing: .5px; font-weight: 700; }
 .graph-status .status-dot { width: 5px; height: 5px; margin: 0; }
 .graph-status-divider { width: 1px; height: 10px; margin: 0 1px; background: #173f45; }
-.asset-node { position: relative; width: 238px; min-height: 88px; padding: 10px 11px 8px; border: 1px solid #28585e; border-radius: 7px; background: linear-gradient(140deg, #102f35, #102f35); box-shadow: 0 7px 24px rgba(16, 47, 53, .24); }
+.asset-node { position: relative; width: 238px; min-height: 96px; padding: 10px 11px 8px; border: 1px solid #28585e; border-radius: 7px; background: linear-gradient(140deg, #102f35, #102f35); box-shadow: 0 7px 24px rgba(16, 47, 53, .24); }
 .react-flow__node-asset { cursor: pointer; transition: opacity .16s ease, filter .16s ease; }
 .react-flow__node-asset:hover .asset-node { filter: brightness(1.17); }
 .node-risk-critical { border-color: rgba(197, 169, 65, .72); box-shadow: inset 0 1px 0 rgba(197, 169, 65, .1), 0 5px 22px rgba(185, 151, 53, .1); }
@@ -249,7 +260,7 @@ tbody tr:hover { background: rgba(203, 217, 213, .015); }
 .node-risk-low .asset-node-top > i { background: #638286; box-shadow: 0 0 7px rgba(99, 130, 134, .4); }
 .asset-node strong { display: block; margin-top: 7px; color: #cbd9d5; font-size: 11px; font-weight: 600; }
 .asset-node > small { display: block; margin-top: 3px; color: #638286; font-size: 8px; }
-.asset-node-risk { position: absolute; right: 10px; bottom: 8px; color: #e0cb70; font-size: 7px; }
+.asset-node-risk { position: absolute; right: 9px; bottom: 7px; max-width: 135px; overflow: hidden; padding: 3px 6px; border: 1px solid rgba(185, 151, 53, .38); border-radius: 4px; background: rgba(213, 187, 82, .18); color: #806b2a; font-size: 10px; font-weight: 700; line-height: 1.2; text-overflow: ellipsis; white-space: nowrap; }
 .node-risk-high .asset-node-risk, .node-risk-medium .asset-node-risk { color: #e0cb70; }
 .node-risk-low .asset-node-risk { color: #88a9aa; }
 .graph-legend { position: absolute; z-index: 4; right: 12px; bottom: 11px; display: flex; gap: 11px; padding: 6px 8px; border: 1px solid #102f35; border-radius: 4px; background: rgba(16, 47, 53, .9); color: #638286; font-size: 8px; }
@@ -458,7 +469,7 @@ tbody tr:hover { background: rgba(203, 217, 213, .015); }
 @media (max-width: 900px) {
   .sidebar { width: 64px; align-items: center; padding-right: 8px; padding-left: 8px; }
   .brand { padding: 0; }
-  .brand > span:last-child, .workspace-switch, .nav-label, .nav-item:not(.active) { display: none; }
+  .brand > span:last-child, .workspace-switch, .nav-label, .nav-item:not(.active), .investigation-tabs { display: none; }
   .main-nav { width: 100%; margin-top: 27px; }
   .nav-item { justify-content: center; padding: 0; font-size: 0; }
   .nav-item svg { width: 19px; height: 19px; }
@@ -1018,6 +1029,10 @@ body { color: var(--text); }
 .hub-overview-link:hover, .hub-incident-title:hover { color: #806b2a; }
 .incident-hub-table { min-width: 850px; }
 .incident-hub-table th { white-space: nowrap; }
+.incident-sort-button { display: inline-flex; align-items: center; gap: 5px; padding: 8px 0; border: 0; background: transparent; color: inherit; font: inherit; letter-spacing: inherit; cursor: pointer; }
+.incident-sort-button:hover { color: #806b2a; }
+.incident-sort-button:focus-visible { outline: 2px solid #b99735; outline-offset: 3px; }
+.incident-sort-button span { color: #806b2a; font-size: 11px; }
 .incident-hub-table td { vertical-align: middle; }
 .incident-hub-table td:first-child { min-width: 200px; }
 .hub-incident-title { display: flex; align-items: baseline; gap: 8px; color: #173f45; font-size: 11px; font-weight: 700; }
@@ -1035,6 +1050,7 @@ body { color: var(--text); }
 .incident-hub-empty strong { color: #173f45; font-size: 12px; }
 .incident-hub-empty span { color: #3c686d; font-size: 10px; }
 .incident-create-modal .modal-heading { margin-bottom: 6px; }
+.incident-create-connection { margin: 0; padding: 9px 10px; border: 1px solid #b99735; border-radius: 5px; background: rgba(213, 187, 82, .18); color: #66571f; font-size: 10px; line-height: 1.5; }
 .incident-create-modal .modal-form select { width: 100%; padding: 9px 10px; border: 1px solid #88a9aa; border-radius: 5px; outline: 0; background: #cbd9d5; color: #173f45; font-size: 10px; }
 .incident-create-modal .modal-form select:focus { border-color: #806b2a; box-shadow: 0 0 0 2px rgba(213, 187, 82, .25); }
 .incident-create-modal .modal-actions { display: flex; justify-content: flex-end; gap: 8px; padding-top: 4px; }
@@ -1664,6 +1680,7 @@ body { color: var(--text); }
 .node-quarantined { border-color: #3b805e !important; box-shadow: 0 0 0 2px rgba(59, 128, 94, .2), 0 5px 22px rgba(35, 96, 67, .2) !important; }
 .node-quarantine-label { color: #d2e8d8; font-size: 7px; letter-spacing: .3px; }
 .node-quarantined .asset-node-top > i { background: #3b805e; }
+.activity-chart .chart-bars i { background: linear-gradient(180deg, #e0cb70, #b99735); opacity: 1; }
 
 @media (max-width: 900px) {
   .responder-session-copy { display: grid; }
@@ -1703,3 +1720,104 @@ body { color: var(--text); }
 .impact-tag.severity-critical,
 .asset-drawer-risk.risk-high,
 .asset-drawer-risk.risk-critical { color: #91353c; }
+
+.incident-hub-banner {
+  align-items: center;
+  border-color: #638286;
+  background: linear-gradient(115deg, #cbd9d5, #adbfbd);
+  box-shadow: 0 10px 28px rgba(16, 47, 53, .16), inset 0 2px 0 rgba(213, 187, 82, .42);
+}
+.incident-hub-heading { min-width: 260px; }
+.incident-hub-heading .eyebrow { color: #28585e; }
+.incident-hub-heading .eyebrow-line { background: #b99735; }
+.incident-hub-heading h1 { color: #102f35; }
+.incident-hub-heading p { color: #28585e; }
+.incident-hub-metrics { display: grid; grid-template-columns: repeat(3, minmax(118px, 1fr)); flex: 1; max-width: 670px; }
+.hub-metric-chip { min-height: 70px; align-content: center; border-color: #88a9aa; background: rgba(213, 224, 220, .78); box-shadow: inset 0 1px rgba(255, 255, 255, .35); }
+.hub-metric-chip span { color: #28585e; }
+.hub-metric-chip strong { color: #102f35; }
+.incident-list-heading { align-items: flex-end; }
+.incident-list-heading h2 { color: #e1ece8; font-size: 21px; }
+.incident-list-heading > div > .eyebrow { color: #95b0b0; }
+.incident-hub-panel { border-color: #3c686d; }
+.incident-hub-panel .panel-heading { padding: 17px 20px; }
+.incident-hub-panel .panel-heading h2 { color: #102f35; font-size: 14px; }
+.incident-hub-panel .panel-heading p { color: #28585e; }
+.incident-hub-panel thead { background: #d5bb52; }
+.incident-hub-panel th { border-color: #b99735; color: #173f45; }
+.incident-sort-button:hover,
+.incident-sort-button span { color: #66571f; }
+.incident-hub-table td { height: 66px; border-bottom-color: #638286; }
+.incident-hub-table tbody tr:hover { background: rgba(213, 187, 82, .13); }
+.incident-hub-empty { min-height: 180px; }
+.incident-hub-empty strong { color: #e1ece8; }
+.incident-hub-empty span { color: #adbfbd; }
+
+.asset-inspection-drawer .tactical-playbook {
+  gap: 12px;
+  padding: 14px;
+  border-color: #638286;
+  background: linear-gradient(145deg, #d5e0dc, #cbd9d5);
+  box-shadow: inset 0 2px 0 rgba(213, 187, 82, .35);
+}
+.tactical-playbook-heading { gap: 10px; }
+.tactical-playbook-heading h3 { color: #102f35; font-size: 13px; }
+.tactical-playbook-heading p { color: #28585e; font-size: 11px; }
+.tactical-command-toolbar { min-height: 30px; }
+.environment-badge { border-color: #638286; background: #173f45; color: #d5e0dc; font-size: 9px; }
+.copy-command-button { min-height: 30px; padding: 0 10px; border-color: #638286; background: #bacbc8; color: #173f45; }
+.copy-command-button:hover { border-color: #b99735; background: #d5bb52; }
+.tactical-command-card .tactical-terminal {
+  max-height: 190px;
+  overflow: auto;
+  padding: 14px;
+  border-color: #638286;
+  border-radius: 6px;
+  background: #0b1f26;
+  box-shadow: inset 0 1px 5px rgba(0, 0, 0, .35), 0 3px 8px rgba(16, 47, 53, .18);
+  color: #ffe27a;
+  font-size: 12px;
+  line-height: 1.75;
+  tab-size: 2;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.tactical-terminal code { color: inherit; }
+.tactical-terminal .command-executable { color: #8de0c5; }
+.tactical-terminal .command-flag { color: #9bd5f7; }
+.tactical-terminal .command-placeholder { color: #ffb47c; }
+.tactical-terminal .command-value { color: #ffe27a; }
+.mitigation-rationale { color: #173f45; font-size: 11px; line-height: 1.65; }
+.tactical-command-card .containment-disclaimer { color: #3c686d; }
+
+@media (max-width: 900px) {
+  .incident-hub-banner { align-items: stretch; }
+  .incident-hub-metrics { max-width: none; }
+}
+@media (max-width: 650px) {
+  .incident-hub-banner { gap: 17px; padding: 18px; }
+  .incident-hub-heading { min-width: 0; }
+  .incident-hub-heading h1 { font-size: 22px; }
+  .incident-hub-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
+  .hub-health-chip { grid-column: 1 / -1; }
+  .incident-list-heading { align-items: stretch; }
+  .incident-hub-panel .panel-heading { align-items: flex-start; }
+  .incident-hub-panel .panel-heading > div { min-width: 0; }
+  .incident-hub-panel .panel-heading p { max-width: 32ch; line-height: 1.5; }
+  .incident-hub-panel .table-wrap { overflow: visible; }
+  .incident-hub-table { display: block; min-width: 0; width: 100%; white-space: normal; }
+  .incident-hub-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; clip-path: inset(50%); }
+  .incident-hub-table tbody { display: grid; gap: 9px; padding: 9px; }
+  .incident-hub-table tr { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 12px; padding: 7px 12px; border: 1px solid #88a9aa; border-radius: 7px; background: #adbfbd; box-shadow: 0 3px 9px rgba(16, 47, 53, .08); }
+  .incident-hub-table td { display: grid; align-content: start; gap: 5px; height: auto; min-width: 0; padding: 9px 2px; border-bottom: 1px solid rgba(99, 130, 134, .42); color: #173f45; white-space: normal; overflow-wrap: anywhere; }
+  .incident-hub-table td::before { content: attr(data-label); color: #3c686d; font-size: 8px; font-weight: 700; letter-spacing: .55px; text-transform: uppercase; }
+  .incident-hub-table td:first-child { grid-column: 1 / -1; padding-top: 6px; }
+  .incident-hub-table td:last-child { display: none; }
+  .incident-hub-table tbody tr:last-child td { border-bottom: 1px solid rgba(99, 130, 134, .42); }
+  .incident-hub-table .hub-incident-title { align-items: flex-start; line-height: 1.4; }
+  .incident-hub-table .hub-incident-subject { margin-left: 0; }
+  .incident-hub-table .hub-risk-meter { grid-template-columns: 39px minmax(0, 1fr); width: 100%; max-width: 160px; }
+  .incident-hub-table .created-cell { font-size: 9px; }
+  .asset-inspection-drawer .tactical-playbook { padding: 12px; }
+  .tactical-generate-button { width: 100%; }
+}

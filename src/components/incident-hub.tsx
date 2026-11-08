@@ -8,9 +8,22 @@ import { tables } from "@/generated/spacetimedb";
 import type { ActivityFeed as LiveActivity, Incident as LiveIncident } from "@/generated/spacetimedb/types";
 import { SeverityBadge, StatusBadge } from "@/components/severity-badge";
 import { useSpacetimeConnection } from "@/components/spacetime-connection-provider";
-import type { Severity } from "@/lib/types";
+import { incidents as demoIncidents } from "@/lib/mock-data";
+import type { Incident as FrontendIncident, Severity } from "@/lib/types";
 
 const riskTone = (score: number) => score >= 85 ? "risk-critical" : score >= 70 ? "risk-high" : score >= 45 ? "risk-medium" : "risk-low";
+type IncidentSortKey = "title" | "severity" | "riskScore" | "classification" | "status" | "lastUpdated";
+type HubIncident = {
+  id: string;
+  title: string;
+  subjectName: string;
+  severity: Severity;
+  riskScore: number;
+  classification: string;
+  status: string;
+  createdAt: Date;
+  lastUpdated: Date;
+};
 
 export function IncidentHub() {
   const router = useRouter();
@@ -20,6 +33,8 @@ export function IncidentHub() {
   const [createOpen, setCreateOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
+  const [sortKey, setSortKey] = useState<IncidentSortKey>("lastUpdated");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
 
   useEffect(() => {
     if (!connection) {
@@ -31,9 +46,7 @@ export function IncidentHub() {
     let active = true;
     const refreshIncidents = () => {
       if (!active) return;
-      const current = Array.from(connection.db.incident.iter()) as LiveIncident[];
-      current.sort((left, right) => Number(right.createdAt.microsSinceUnixEpoch - left.createdAt.microsSinceUnixEpoch));
-      setIncidents(current);
+      setIncidents(Array.from(connection.db.incident.iter()) as LiveIncident[]);
     };
     const refreshActivities = () => {
       if (active) setActivities(Array.from(connection.db.activityFeed.iter()) as LiveActivity[]);
@@ -67,28 +80,88 @@ export function IncidentHub() {
     };
   }, [connection]);
 
+  const latestActivityByIncident = useMemo(() => {
+    const latest = new Map<string, Date>();
+    for (const activity of activities) {
+      const incidentId = activity.incidentId.toString();
+      const updatedAt = new Date(Number(activity.createdAt.microsSinceUnixEpoch / 1000n));
+      const current = latest.get(incidentId);
+      if (!current || updatedAt > current) latest.set(incidentId, updatedAt);
+    }
+    return latest;
+  }, [activities]);
+  const displayIncidents = useMemo<HubIncident[]>(() => {
+    const source: HubIncident[] = incidents.length
+      ? incidents.map((incident) => {
+          const createdAt = new Date(Number(incident.createdAt.microsSinceUnixEpoch / 1000n));
+          return {
+            id: incident.id.toString(),
+            title: incident.title,
+            subjectName: incident.subjectName,
+            severity: normalizeSeverity(incident.severity),
+            riskScore: Number(incident.riskScore),
+            classification: incident.classification || "Pending Analysis",
+            status: incident.status,
+            createdAt,
+            lastUpdated: latestActivityByIncident.get(incident.id.toString()) ?? createdAt,
+          };
+        })
+      : demoIncidents.map((incident: FrontendIncident) => ({
+          id: incident.id,
+          title: incident.title,
+          subjectName: incident.subjectName,
+          severity: incident.severity,
+          riskScore: incident.riskScore,
+          classification: incident.threatClassification || "Pending Analysis",
+          status: incident.status,
+          createdAt: new Date(incident.createdAt),
+          lastUpdated: new Date(incident.createdAt),
+        }));
+
+    return source.sort((left, right) => {
+      const compare = (() => {
+        switch (sortKey) {
+          case "title":
+            return left.title.localeCompare(right.title);
+          case "severity":
+            return severityRank(left.severity) - severityRank(right.severity);
+          case "riskScore":
+            return left.riskScore - right.riskScore;
+          case "classification":
+            return left.classification.localeCompare(right.classification);
+          case "status":
+            return left.status.localeCompare(right.status);
+          case "lastUpdated":
+            return left.lastUpdated.getTime() - right.lastUpdated.getTime();
+        }
+      })();
+      return sortDirection === "asc" ? compare : -compare;
+    });
+  }, [incidents, latestActivityByIncident, sortDirection, sortKey]);
   const activeIncidents = useMemo(
-    () => incidents.filter((incident) => !["closed", "contained"].includes(incident.status.toLowerCase())),
-    [incidents],
+    () => displayIncidents.filter((incident) => !["closed", "contained"].includes(incident.status.toLowerCase())),
+    [displayIncidents],
   );
   const criticalCount = useMemo(
     () => activeIncidents.filter((incident) => incident.severity.toLowerCase() === "critical").length,
     [activeIncidents],
   );
-  const lastActivityByIncident = useMemo(() => {
-    const latest = new Map<string, bigint>();
-    for (const activity of activities) {
-      const incidentId = activity.incidentId.toString();
-      const current = latest.get(incidentId);
-      if (current === undefined || activity.createdAt.microsSinceUnixEpoch > current) {
-        latest.set(incidentId, activity.createdAt.microsSinceUnixEpoch);
-      }
+
+  function changeSort(nextKey: IncidentSortKey) {
+    if (sortKey === nextKey) {
+      setSortDirection((current) => current === "asc" ? "desc" : "asc");
+      return;
     }
-    return latest;
-  }, [activities]);
+    setSortKey(nextKey);
+    setSortDirection(nextKey === "lastUpdated" ? "desc" : "asc");
+  }
 
   async function declareIncident(formData: FormData) {
-    if (!connection || creating) return;
+    if (creating) return;
+    if (!connection) {
+      setError(connectionError || "SpacetimeDB is not connected yet. Start the local database and try again.");
+      return;
+    }
     const title = String(formData.get("title") ?? "").trim();
     const description = String(formData.get("description") ?? "").trim();
     const severity = String(formData.get("severity") ?? "Medium") as Severity;
@@ -106,11 +179,17 @@ export function IncidentHub() {
 
     setCreating(true);
     setError("");
+    const existingIncidentIds = new Set(
+      Array.from(connection.db.incident.iter(), (incident) => incident.id.toString()),
+    );
     let timeoutId: number | undefined;
     let removeIncidentListener = () => {};
+    let resolveCreatedIncident: (incident: LiveIncident) => void = () => {};
     const createdIncident = new Promise<LiveIncident>((resolve, reject) => {
+      resolveCreatedIncident = resolve;
       const matchCreatedIncident = (_context: unknown, row: LiveIncident) => {
         if (
+          !existingIncidentIds.has(row.id.toString()) &&
           row.createdBy.isEqual(identity) &&
           row.title === title &&
           row.description === description
@@ -133,6 +212,15 @@ export function IncidentHub() {
         severity,
         initialNotes: triageNotes,
       });
+      const cachedIncident = Array.from(connection.db.incident.iter())
+        .filter((row) =>
+          !existingIncidentIds.has(row.id.toString()) &&
+          row.createdBy.isEqual(identity) &&
+          row.title === title &&
+          row.description === description,
+        )
+        .sort((left, right) => left.id > right.id ? -1 : 1)[0];
+      if (cachedIncident) resolveCreatedIncident(cachedIncident);
       const created = await createdIncident;
       setCreateOpen(false);
       router.push(`/investigations/${created.id}`);
@@ -150,7 +238,7 @@ export function IncidentHub() {
       <section className="incident-hub-banner">
         <div className="incident-hub-heading">
           <div className="eyebrow"><span className="eyebrow-line" /> SOVEREIGN RESPONSE ENVIRONMENT</div>
-          <h1>FumbleBee Incident Command Hub</h1>
+          <h1>Security Incidents</h1>
           <p>Live incident operations across your organization.</p>
         </div>
         <div className="incident-hub-metrics">
@@ -166,7 +254,7 @@ export function IncidentHub() {
           <h2>All incidents</h2>
           <p className="page-subtitle">Monitor severity, risk, and investigation status in real time.</p>
         </div>
-        <button className="button button-primary" onClick={() => { setError(""); setCreateOpen(true); }} disabled={!connection}>
+        <button className="button button-primary" onClick={() => { setError(""); setCreateOpen(true); }}>
           <Plus size={15} /> Declare New Incident
         </button>
       </div>
@@ -175,26 +263,33 @@ export function IncidentHub() {
 
       <section className="panel incident-hub-panel">
         <div className="panel-heading">
-          <div><div className="section-title-row"><h2>Incident register</h2><span className="count-pill">{incidents.length}</span></div><p>Subscribed directly from the live SpacetimeDB incident table.</p></div>
+          <div><div className="section-title-row"><h2>Incident register</h2><span className="count-pill">{displayIncidents.length}</span></div><p>{incidents.length ? "Live SpacetimeDB incidents. Select a column heading to sort." : "Demo incidents are shown until live records are available. Select a column heading to sort."}</p></div>
           <Link className="hub-overview-link" href="/">Security overview</Link>
         </div>
-        {incidents.length ? (
+        {displayIncidents.length ? (
           <div className="table-wrap">
             <table className="incident-hub-table">
-              <thead><tr><th>INCIDENT</th><th>SEVERITY</th><th>RISK SCORE</th><th>CLASSIFICATION</th><th>STATUS</th><th>LAST UPDATED</th><th /></tr></thead>
+              <thead><tr>
+                <th aria-sort={sortKey === "title" ? sortDirection === "asc" ? "ascending" : "descending" : "none"}><button className="incident-sort-button" onClick={() => changeSort("title")}>INCIDENT{sortKey === "title" && <span aria-hidden="true">{sortDirection === "asc" ? "↑" : "↓"}</span>}</button></th>
+                <th aria-sort={sortKey === "severity" ? sortDirection === "asc" ? "ascending" : "descending" : "none"}><button className="incident-sort-button" onClick={() => changeSort("severity")}>SEVERITY{sortKey === "severity" && <span>{sortDirection === "asc" ? "↑" : "↓"}</span>}</button></th>
+                <th aria-sort={sortKey === "riskScore" ? sortDirection === "asc" ? "ascending" : "descending" : "none"}><button className="incident-sort-button" onClick={() => changeSort("riskScore")}>RISK SCORE{sortKey === "riskScore" && <span>{sortDirection === "asc" ? "↑" : "↓"}</span>}</button></th>
+                <th aria-sort={sortKey === "classification" ? sortDirection === "asc" ? "ascending" : "descending" : "none"}><button className="incident-sort-button" onClick={() => changeSort("classification")}>CLASSIFICATION{sortKey === "classification" && <span>{sortDirection === "asc" ? "↑" : "↓"}</span>}</button></th>
+                <th aria-sort={sortKey === "status" ? sortDirection === "asc" ? "ascending" : "descending" : "none"}><button className="incident-sort-button" onClick={() => changeSort("status")}>STATUS{sortKey === "status" && <span>{sortDirection === "asc" ? "↑" : "↓"}</span>}</button></th>
+                <th aria-sort={sortKey === "lastUpdated" ? sortDirection === "asc" ? "ascending" : "descending" : "none"}><button className="incident-sort-button" onClick={() => changeSort("lastUpdated")}>LAST UPDATED{sortKey === "lastUpdated" && <span>{sortDirection === "asc" ? "↑" : "↓"}</span>}</button></th>
+                <th />
+              </tr></thead>
               <tbody>
-                {incidents.map((incident) => {
-                  const riskScore = Number(incident.riskScore);
-                  const updatedAt = new Date(Number((lastActivityByIncident.get(incident.id.toString()) ?? incident.createdAt.microsSinceUnixEpoch) / 1000n));
+                {displayIncidents.map((incident) => {
+                  const riskScore = incident.riskScore;
                   return (
-                    <tr key={String(incident.id)}>
-                      <td><Link className="hub-incident-title" href={`/investigations/${incident.id}`}><span>#{incident.id.toString()}</span>{incident.title}</Link><small className="hub-incident-subject">{incident.subjectName}</small></td>
-                      <td><SeverityBadge severity={normalizeSeverity(incident.severity)} /></td>
-                      <td><div className="hub-risk-meter"><span className={`risk-score ${riskTone(riskScore)}`}>{riskScore}<small>/100</small></span><i><span className={riskTone(riskScore)} style={{ width: `${Math.min(100, Math.max(0, riskScore))}%` }} /></i></div></td>
-                      <td><span className="hub-classification">{incident.classification || "Pending Analysis"}</span></td>
-                      <td><StatusBadge status={normalizeStatus(incident.status)} /></td>
-                      <td className="created-cell">{new Intl.DateTimeFormat("en", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" }).format(updatedAt)}</td>
-                      <td><Link className="row-action" href={`/investigations/${incident.id}`} aria-label={`Open incident ${incident.id}`}><ArrowRight size={16} /></Link></td>
+                    <tr key={incident.id}>
+                      <td data-label="Incident"><Link className="hub-incident-title" href={`/investigations/${incident.id}`}><span>#{incident.id}</span>{incident.title}</Link><small className="hub-incident-subject">{incident.subjectName}</small></td>
+                      <td data-label="Severity"><SeverityBadge severity={incident.severity} /></td>
+                      <td data-label="Risk score"><div className="hub-risk-meter"><span className={`risk-score ${riskTone(riskScore)}`}>{riskScore}<small>/100</small></span><i><span className={riskTone(riskScore)} style={{ width: `${Math.min(100, Math.max(0, riskScore))}%` }} /></i></div></td>
+                      <td data-label="Classification"><span className="hub-classification">{incident.classification}</span></td>
+                      <td data-label="Status"><StatusBadge status={normalizeStatus(incident.status)} /></td>
+                      <td data-label="Last updated" className="created-cell">{new Intl.DateTimeFormat("en", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" }).format(incident.lastUpdated)}</td>
+                      <td data-label="Open"><Link className="row-action" href={`/investigations/${incident.id}`} aria-label={`Open incident ${incident.id}`}><ArrowRight size={16} /></Link></td>
                     </tr>
                   );
                 })}
@@ -216,7 +311,11 @@ export function IncidentHub() {
               <div><span className="auth-kicker">INCIDENT COMMAND</span><h2 id="declare-incident-title">Declare New Incident</h2><p>Create a live incident and route directly to its investigation workspace.</p></div>
               <button className="icon-button" onClick={() => setCreateOpen(false)} disabled={creating} aria-label="Close declare incident dialog"><X size={18} /></button>
             </div>
-            <form action={declareIncident} className="modal-form">
+            <form onSubmit={(event) => {
+              event.preventDefault();
+              void declareIncident(new FormData(event.currentTarget));
+            }} className="modal-form">
+              {!connection && <p className="incident-create-connection" role="status">{connectionError || "Connecting to SpacetimeDB… Incident creation will be available when the database is online."}</p>}
               <label>Incident Title<input name="title" placeholder="e.g. Unusual bulk data access" required /></label>
               <label>Description<textarea name="description" rows={3} placeholder="Summarize the observed incident and context." required /></label>
               <label>Severity<select name="severity" defaultValue="Medium"><option>Low</option><option>Medium</option><option>High</option><option>Critical</option></select></label>
@@ -224,7 +323,7 @@ export function IncidentHub() {
               {error && <p className="auth-error" role="alert">{error}</p>}
               <div className="modal-actions">
                 <button type="button" className="button button-secondary" onClick={() => setCreateOpen(false)} disabled={creating}>Cancel</button>
-                <button className="button button-primary" type="submit" disabled={creating || !connection}>{creating ? "Declaring incident..." : "Declare Incident"}</button>
+                <button className="button button-primary" type="submit" disabled={creating || !connection}>{creating ? "Declaring incident..." : connection ? "Declare Incident" : "Database unavailable"}</button>
               </div>
             </form>
           </section>
@@ -240,6 +339,15 @@ function normalizeSeverity(severity: string): Severity {
     case "high": return "High";
     case "low": return "Low";
     default: return "Medium";
+  }
+}
+
+function severityRank(severity: Severity): number {
+  switch (severity) {
+    case "Low": return 1;
+    case "Medium": return 2;
+    case "High": return 3;
+    case "Critical": return 4;
   }
 }
 

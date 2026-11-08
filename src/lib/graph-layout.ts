@@ -1,8 +1,8 @@
 import dagre from "dagre";
-import type { Edge, Node } from "@xyflow/react";
+import { MarkerType, type Edge, type Node } from "@xyflow/react";
 
 const defaultNodeWidth = 238;
-const defaultNodeHeight = 88;
+const defaultNodeHeight = 96;
 
 export function getAttackPathLayout(nodes: Node[], edges: Edge[]) {
   const graph = new dagre.graphlib.Graph();
@@ -35,6 +35,7 @@ export function getAttackPathLayout(nodes: Node[], edges: Edge[]) {
     type: edge.type ?? "smoothstep",
     animated: edge.animated ?? true,
     selectable: false,
+    markerEnd: { type: MarkerType.ArrowClosed, color: "#d5bb52", width: 16, height: 16 },
     style: { stroke: "#d5bb52", strokeWidth: 2, ...edge.style },
     labelStyle: { fill: "#d5bb52", fontSize: 10, fontWeight: 600, ...edge.labelStyle },
     labelBgStyle: { fill: "#102f35", fillOpacity: 1, ...edge.labelBgStyle },

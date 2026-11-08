@@ -1,7 +1,7 @@
 import { IncidentHub } from "@/components/incident-hub";
 
 export const metadata = {
-  title: "FumbleBee | Incident Command Hub",
+  title: "FumbleBee | Security Incidents",
 };
 
 export default function IncidentsPage() {

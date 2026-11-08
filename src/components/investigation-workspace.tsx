@@ -624,7 +624,7 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
       <div className="investigation-heading">
         <div className="investigation-title-panel">
           <div className="investigation-heading-copy">
-            <div className="eyebrow"><span className="eyebrow-line" /><Link href="/incidents" className="heading-back-link">Incident Command Hub</Link><span className="meta-dot">/</span><span>Incident #{incident.id}</span></div>
+            <div className="eyebrow"><span className="eyebrow-line" /><Link href="/incidents" className="heading-back-link">Security Incidents</Link><span className="meta-dot">/</span><span>Incident #{incident.id}</span></div>
             <h1>{incident.title}</h1>
             <div className="investigation-meta"><span>Subject: <strong>{incident.subjectName}</strong></span><StatusBadge status={incident.status} /><SeverityBadge severity={findings.severity} /></div>
           </div>
