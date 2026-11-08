@@ -8,15 +8,18 @@ import {
 export interface ResponderSessionProfile {
   username: string;
   role: string;
+  token?: string;
 }
 
 interface SpacetimeConnectionContextValue {
   connection: DbConnection | null;
   connectionError: string;
   saveSession: (profile: ResponderSessionProfile) => void;
+  switchSession: (profile: ResponderSessionProfile) => void;
 }
 
 const sessionStorageKey = "fumblebee_session";
+const responderSessionsStorageKey = "fumblebee_responder_sessions";
 const SpacetimeConnectionContext = createContext<SpacetimeConnectionContextValue | null>(null);
 
 function readSavedToken(): string | undefined {
@@ -83,11 +86,27 @@ export function SpacetimeConnectionProvider({ children }: { children: React.Reac
     if (!authToken) {
       throw new Error("SpacetimeDB has not issued a responder session token.");
     }
-    localStorage.setItem(sessionStorageKey, JSON.stringify({ ...profile, token: authToken }));
+    const savedProfile = { ...profile, token: authToken };
+    localStorage.setItem(sessionStorageKey, JSON.stringify(savedProfile));
+    const storedSessions = localStorage.getItem(responderSessionsStorageKey);
+    const sessions: ResponderSessionProfile[] = storedSessions ? JSON.parse(storedSessions) as ResponderSessionProfile[] : [];
+    const updatedSessions = [
+      ...sessions.filter((session) => session.username !== profile.username),
+      savedProfile,
+    ];
+    localStorage.setItem(responderSessionsStorageKey, JSON.stringify(updatedSessions));
+  }
+
+  function switchSession(profile: ResponderSessionProfile) {
+    if (!profile.token) {
+      throw new Error("This responder has no saved SpacetimeDB session on this device.");
+    }
+    localStorage.setItem(sessionStorageKey, JSON.stringify(profile));
+    window.location.reload();
   }
 
   return (
-    <SpacetimeConnectionContext.Provider value={{ connection, connectionError, saveSession }}>
+    <SpacetimeConnectionContext.Provider value={{ connection, connectionError, saveSession, switchSession }}>
       {children}
     </SpacetimeConnectionContext.Provider>
   );
