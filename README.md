@@ -60,6 +60,12 @@ npx tsx scripts/test-pipeline.ts
 spacetime publish --server local --module-path ./server --yes sentinelgraph
 ```
 
+Reset Incident #1 and clear its analysis graph before a demo run:
+
+```bash
+npm run reset-demo
+```
+
 After installation, the SpacetimeDB CLI may need to be reloaded through your terminal PATH. The `applyAiAnalysis` reducer accepts JSON-string payloads for `recommendations`, `assets`, and `relationships`, matching the SpacetimeDB v2 TypeScript constraints.
 
 Generated SpacetimeDB bindings should be registered in the Next.js transport passed to `createSentinelGraphClient`. The SDK exposes React Flow nodes under `data.asset` and supports both serialized backend graph data and frontend edge property variants.

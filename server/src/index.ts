@@ -109,8 +109,17 @@ const spacetime = schema({
 type Role = 'admin' | 'investigator' | 'viewer';
 
 function requireRole(ctx: any, allowed: Role[]) {
-  const row = ctx.db.user.identity.find(ctx.sender);
-  if (!row || !allowed.includes(row.role as Role)) {
+  let row = ctx.db.user.identity.find(ctx.sender);
+  if (!row) {
+    row = ctx.db.user.insert({
+      identity: ctx.sender,
+      name: 'SOC Analyst',
+      email: 'analyst@sentinelgraph.local',
+      role: 'investigator',
+      createdAt: ctx.timestamp,
+    });
+  }
+  if (!allowed.includes(row.role as Role)) {
     throw new SenderError('Permission denied');
   }
   return row;

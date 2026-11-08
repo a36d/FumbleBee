@@ -14,7 +14,8 @@
     "build:backend": "npm run build -w server && npm run build -w services && npm run build -w sdk",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "test": "npm run build:backend"
+    "test": "npm run build:backend",
+    "reset-demo": "tsx scripts/reset-demo.ts"
   },
   "dependencies": {
     "@xyflow/react": "^12.8.4",

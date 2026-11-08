@@ -36,6 +36,7 @@ export interface NemotronOptions {
   endpoint?: string;
   model?: string;
   fetch?: typeof globalThis.fetch;
+  timeoutMs?: number;
 }
 
 export function mockNemotron(input: NemotronInput): NemotronAnalysis {
@@ -102,10 +103,15 @@ export async function analyzeWithNemotron(
 ): Promise<{ analysis: NemotronAnalysis; source: 'nemotron' | 'mock' }> {
   const input = NemotronInputSchema.parse(rawInput);
   const apiKey = options.apiKey ?? process.env.NVIDIA_API_KEY;
-  if (!apiKey) return { analysis: mockNemotron(input), source: 'mock' };
+  if (!apiKey) {
+    console.warn('[Nemotron] Falling back to structured mock data (NVIDIA_API_KEY is not set)');
+    return { analysis: mockNemotron(input), source: 'mock' };
+  }
 
   const endpoint = options.endpoint ?? process.env.NVIDIA_API_URL ?? 'https://integrate.api.nvidia.com/v1/chat/completions';
   const fetchImpl = options.fetch ?? globalThis.fetch;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), options.timeoutMs ?? 15000);
   const requestSchema = {
     type: 'object',
     additionalProperties: false,
@@ -155,6 +161,7 @@ export async function analyzeWithNemotron(
   try {
     const response = await fetchImpl(endpoint, {
       method: 'POST',
+      signal: controller.signal,
       headers: {
         Authorization: `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
@@ -184,9 +191,16 @@ export async function analyzeWithNemotron(
     if (!content) throw new Error('Nemotron API returned no content');
     const parsed = NemotronAnalysisSchema.safeParse(JSON.parse(content));
     if (!parsed.success) throw new Error(`Nemotron returned invalid analysis: ${parsed.error.message}`);
+    clearTimeout(timeout);
     return { analysis: parsed.data, source: 'nemotron' };
   } catch (error) {
-    console.warn('Nemotron unavailable; using mock analysis:', error instanceof Error ? error.message : String(error));
+    clearTimeout(timeout);
+    const reason = error instanceof Error && error.name === 'AbortError'
+      ? 'request timed out'
+      : error instanceof Error
+        ? error.message
+        : String(error);
+    console.warn(`[Nemotron] Falling back to structured mock data (${reason})`);
     return { analysis: mockNemotron(input), source: 'mock' };
   }
 }
