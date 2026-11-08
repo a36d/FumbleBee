@@ -13,7 +13,6 @@ import {
 export default {
   title: __t.string(),
   description: __t.string(),
-  subjectName: __t.string(),
-  status: __t.string(),
   severity: __t.string(),
+  initialNotes: __t.string(),
 };
