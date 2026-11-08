@@ -1,7 +1,7 @@
 "use client";
 
-import { memo } from "react";
-import { Handle, Position, ReactFlow, Background, Controls, MiniMap, type Edge, type Node, type NodeProps } from "@xyflow/react";
+import { memo, useMemo } from "react";
+import { Handle, Position, ReactFlow, Background, Controls, MiniMap, type Edge, type Node, type NodeMouseHandler, type NodeProps } from "@xyflow/react";
 import { Database, FolderOpen, UserRound } from "lucide-react";
 import type { Asset } from "@/lib/types";
 
@@ -28,14 +28,43 @@ function AssetNode({ data }: NodeProps) {
 }
 const nodeTypes = { asset: memo(AssetNode) };
 
-export function AttackGraph({ nodes, edges }: { nodes: Node[]; edges: Edge[] }) {
+interface AttackGraphProps {
+  nodes: Node[];
+  edges: Edge[];
+  highRiskOnly: boolean;
+  onNodeClick: NodeMouseHandler;
+}
+
+function isHighRiskNode(node: Node): boolean {
+  const asset = node.data.asset as Asset | undefined;
+  const riskLabel = asset?.riskLabel.toLowerCase();
+  return riskLabel === "high" || riskLabel === "critical";
+}
+
+export function AttackGraph({ nodes, edges, highRiskOnly, onNodeClick }: AttackGraphProps) {
+  const visibleNodeIds = useMemo(
+    () => new Set(nodes.filter((node) => !highRiskOnly || isHighRiskNode(node)).map((node) => node.id)),
+    [highRiskOnly, nodes],
+  );
+  const displayNodes = useMemo(
+    () => nodes.map((node) => ({ ...node, hidden: !visibleNodeIds.has(node.id) })),
+    [nodes, visibleNodeIds],
+  );
+  const displayEdges = useMemo(
+    () => edges.map((edge) => ({
+      ...edge,
+      hidden: !visibleNodeIds.has(edge.source) || !visibleNodeIds.has(edge.target),
+    })),
+    [edges, visibleNodeIds],
+  );
+
   return (
     <div className="graph-canvas">
-      <div className="graph-status"><span className="status-dot" /> LIVE ATTACK PATH <span className="graph-status-divider" /> {nodes.length} ENTITIES</div>
-      <ReactFlow key={nodes.map(({ id }) => id).join(":")} nodes={nodes} edges={edges} nodeTypes={nodeTypes} fitView fitViewOptions={{ padding: 0.18 }} minZoom={0.45} maxZoom={1.5} nodesDraggable={false} nodesConnectable={false} elementsSelectable={false} panOnDrag zoomOnScroll zoomOnPinch attributionPosition="top-right">
+      <div className="graph-status"><span className="status-dot" /> LIVE ATTACK PATH <span className="graph-status-divider" /> {visibleNodeIds.size} ENTITIES</div>
+      <ReactFlow key={nodes.map(({ id }) => id).join(":")} nodes={displayNodes} edges={displayEdges} nodeTypes={nodeTypes} fitView fitViewOptions={{ padding: 0.18 }} minZoom={0.45} maxZoom={1.5} nodesDraggable={false} nodesConnectable={false} elementsSelectable={false} onNodeClick={onNodeClick} panOnDrag zoomOnScroll zoomOnPinch attributionPosition="top-right">
         <Background color="#233144" gap={22} size={1} />
         <Controls showInteractive={false} />
-        <MiniMap nodeColor={(node) => {
+        <MiniMap position="top-right" nodeColor={(node) => {
           const asset = node.data.asset as Asset;
           return asset.type === "identity" ? "#fb7185" : asset.type === "share" || asset.type === "resource" ? "#fbbf24" : "#f43f5e";
         }} maskColor="rgba(2, 6, 23, 0.7)" />

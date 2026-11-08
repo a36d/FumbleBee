@@ -21,7 +21,11 @@ export const incidents: Incident[] = [
     threatClassification: "Pending analysis",
     blastRadius: 0,
     impactSummary: "Potential exposure of production data and unauthorized privilege escalation.",
-    recommendations: [],
+    recommendations: [
+      "Revoke active sessions for the production service account.",
+      "Restore the approved IAM trust policy and review the added principal.",
+      "Preserve CloudTrail records for the affected S3 buckets.",
+    ],
     confidence: 0,
   },
   {

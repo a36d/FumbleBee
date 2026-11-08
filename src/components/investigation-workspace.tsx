@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Activity, AlertTriangle, ArrowLeft, ArrowUpRight, Check, CheckCircle2, Clock3, FileClock, Fingerprint, LoaderCircle, LockKeyhole, Plus, Sparkles } from "lucide-react";
+import { Activity, AlertTriangle, ArrowLeft, ArrowUpRight, Check, CheckCircle2, Clock3, FileClock, Fingerprint, LoaderCircle, LockKeyhole, Plus, Sparkles, X } from "lucide-react";
 import Link from "next/link";
+import type { Node } from "@xyflow/react";
 import { createSentinelGraphClient, formatAttackGraph, type AiAnalysisInput } from "@/sdk/src/index";
 import {
   DbConnection,
@@ -28,6 +29,8 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
   const [analysisRunning, setAnalysisRunning] = useState(false);
   const [analysisError, setAnalysisError] = useState("");
   const [analysisResult, setAnalysisResult] = useState<AiAnalysisInput | null>(null);
+  const [highRiskOnly, setHighRiskOnly] = useState(false);
+  const [selectedAsset, setSelectedAsset] = useState<FrontendAsset | null>(null);
   const [graph, setGraph] = useState(() => {
     const graphAssets = incident.id === "1" ? seededIncidentAssets : assets;
     const graphRelationships = incident.id === "1" ? seededIncidentRelationships : relationships;
@@ -270,6 +273,21 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
     recommendations: analysisResult?.recommendations ?? incident.recommendations,
   };
 
+  const selectedAssetSeverity = getAssetSeverity(selectedAsset?.riskLabel, findings.severity);
+  const selectedAssetRiskScore = selectedAsset
+    ? selectedAsset.type === "identity"
+      ? findings.riskScore
+      : getAssetRiskScore(selectedAssetSeverity)
+    : 0;
+  const selectedAssetRecommendations = selectedAsset
+    ? getAssetRecommendations(selectedAsset, findings.recommendations)
+    : [];
+
+  function handleGraphNodeClick(_event: React.MouseEvent, node: Node) {
+    const asset = node.data.asset as FrontendAsset | undefined;
+    if (asset) setSelectedAsset(asset);
+  }
+
   const panelActivities = useMemo(() => {
     const workspaceActivities = events.map((item) => ({
         id: item.id,
@@ -316,7 +334,12 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
         <div className="investigation-left">
           <section className="panel graph-panel">
             <div className="panel-heading graph-heading"><div><div className="section-title-row"><span className="panel-heading-icon"><Activity size={16} /></span><h2>Attack path</h2><span className="ai-generated"><Sparkles size={11} /> AI GENERATED</span></div><p>Observed entity relationships and potential data exposure path</p></div><button className="button button-quiet" onClick={() => setAuditOpen(true)}><LockKeyhole size={14} /> Evidence log</button></div>
-            <AttackGraph nodes={graph.nodes} edges={graph.edges} />
+            <div className="graph-filter-bar" role="group" aria-label="Filter attack graph nodes">
+              <span>SHOW</span>
+              <button type="button" className={`graph-filter-button ${!highRiskOnly ? "active" : ""}`} aria-pressed={!highRiskOnly} onClick={() => setHighRiskOnly(false)}>All Nodes</button>
+              <button type="button" className={`graph-filter-button ${highRiskOnly ? "active" : ""}`} aria-pressed={highRiskOnly} onClick={() => setHighRiskOnly(true)}>High &amp; Critical Only</button>
+            </div>
+            <AttackGraph nodes={graph.nodes} edges={graph.edges} highRiskOnly={highRiskOnly} onNodeClick={handleGraphNodeClick} />
             <div className="graph-footnote"><span><i className="graph-foot-dot" /> Path confidence <strong>{findings.confidence}%</strong></span><span>{analysisResult ? "Generated just now" : "Seeded investigation path"}</span></div>
           </section>
           <section className="panel impact-panel"><div className="panel-heading"><div><div className="section-title-row"><span className="panel-heading-icon panel-icon-rose"><AlertTriangle size={16} /></span><h2>Impact summary</h2></div></div><span className="impact-tag">{findings.severity.toUpperCase()} IMPACT</span></div><p>{findings.impactSummary} Activity spans <strong>{findings.blastRadius} connected assets</strong>.</p><div className="impact-tags"><span><DatabaseIcon /> Customer records</span><span><CodeIcon /> Source code</span><span><LockKeyhole size={12} /> Restricted share</span></div></section>
@@ -346,8 +369,83 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
       </div>
 
       {auditOpen && <div className="drawer-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setAuditOpen(false); }}><aside className="audit-drawer" role="dialog" aria-modal="true" aria-labelledby="audit-title"><div className="drawer-header"><div><div className="drawer-kicker"><span className="status-dot" /> TAMPER-EVIDENT RECORD</div><h2 id="audit-title">Audit trail</h2><p>Cryptographically linked investigation events.</p></div><button className="icon-button" onClick={() => setAuditOpen(false)} aria-label="Close audit trail">×</button></div><div className="chain-status"><CheckCircle2 size={16} /><span><strong>Chain integrity verified</strong><small>All {auditLogs.length} entries are linked and unmodified</small></span><Check size={14} /></div><div className="audit-list">{auditLogs.map((log) => <article className="audit-entry" key={log.id}><div className="audit-entry-heading"><span className="audit-sequence">#{String(log.sequence).padStart(4, "0")}</span><span className="audit-time"><Clock3 size={12} />{relativeTime(log.timestamp)}</span></div><h3>{log.action}</h3><span className="audit-actor">by <strong>{log.actor}</strong></span><div className="hash-row"><span>PREVIOUS HASH</span><code>{log.previousHash}</code></div><div className="hash-row"><span>CURRENT HASH</span><code>{log.currentHash}</code></div></article>)}</div><div className="drawer-footer"><Fingerprint size={15} /><span>SHA-256 · Append-only event chain</span><button onClick={() => setAuditOpen(false)}>Done</button></div></aside></div>}
+      {selectedAsset && (
+        <div className="drawer-backdrop asset-drawer-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedAsset(null); }}>
+          <aside className="asset-inspection-drawer" role="dialog" aria-modal="true" aria-labelledby="asset-drawer-title">
+            <div className="drawer-header">
+              <div>
+                <div className="drawer-kicker"><span className="status-dot" /> ATTACK PATH ENTITY</div>
+                <h2 id="asset-drawer-title">{selectedAsset.name}</h2>
+                <p>{getAssetTypeLabel(selectedAsset.type)}</p>
+              </div>
+              <button className="icon-button" onClick={() => setSelectedAsset(null)} aria-label="Close asset details"><X size={18} /></button>
+            </div>
+            <div className="asset-drawer-content">
+              <div className="asset-risk-summary">
+                <div><span className="summary-label">RISK SCORE</span><strong className={`asset-drawer-risk risk-${selectedAssetSeverity.toLowerCase()}`}>{selectedAssetRiskScore}<small>/100</small></strong></div>
+                <div><span className="summary-label">SEVERITY</span><SeverityBadge severity={selectedAssetSeverity} /></div>
+              </div>
+              <section className="asset-detail-section">
+                <span className="summary-label">COMPROMISE DETAILS</span>
+                <p>{selectedAsset.description || "No additional asset details are available."}</p>
+                <span className={`asset-blast-status ${selectedAssetSeverity === "High" || selectedAssetSeverity === "Critical" ? "in-blast-radius" : ""}`}>
+                  <i />{selectedAssetSeverity === "High" || selectedAssetSeverity === "Critical" ? "In potential blast radius" : "Monitored — no direct compromise detected"}
+                </span>
+              </section>
+              <section className="asset-detail-section">
+                <span className="summary-label">RELATED RECOMMENDATIONS</span>
+                {selectedAssetRecommendations.length ? (
+                  <ul className="asset-recommendation-list">{selectedAssetRecommendations.map((recommendation) => <li key={recommendation}><Check size={13} />{recommendation}</li>)}</ul>
+                ) : <p>No recommendations are currently associated with this asset.</p>}
+              </section>
+            </div>
+            <div className="drawer-footer"><LockKeyhole size={14} /><span>Asset details from the current investigation</span><button onClick={() => setSelectedAsset(null)}>Done</button></div>
+          </aside>
+        </div>
+      )}
     </>
   );
+}
+
+function getAssetSeverity(riskLabel: string | undefined, fallback: FrontendIncident["severity"]): FrontendIncident["severity"] {
+  const normalized = riskLabel?.toLowerCase();
+  if (normalized === "critical" || normalized === "high" || normalized === "medium" || normalized === "low") {
+    return normalized[0].toUpperCase() + normalized.slice(1) as FrontendIncident["severity"];
+  }
+  return fallback;
+}
+
+function getAssetRiskScore(severity: FrontendIncident["severity"]): number {
+  switch (severity) {
+    case "Critical": return 95;
+    case "High": return 78;
+    case "Medium": return 52;
+    case "Low": return 24;
+  }
+}
+
+function getAssetTypeLabel(type: string): string {
+  switch (type.toLowerCase()) {
+    case "identity": return "Host / Service Identity";
+    case "role":
+    case "iam":
+    case "resource": return "IAM Role / Resource";
+    case "share": return "S3 Bucket / Shared Resource";
+    case "database": return "Database";
+    default: return "Investigation Asset";
+  }
+}
+
+function getAssetRecommendations(asset: FrontendAsset, recommendations: string[]): string[] {
+  const terms = `${asset.name} ${asset.type} ${asset.description}`
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((term) => term.length > 3);
+  const relevant = recommendations.filter((recommendation) => {
+    const normalized = recommendation.toLowerCase();
+    return terms.some((term) => normalized.includes(term));
+  });
+  return relevant.length > 0 ? relevant : recommendations.slice(0, 3);
 }
 
 function DatabaseIcon() { return <span className="tiny-db">DB</span>; }
