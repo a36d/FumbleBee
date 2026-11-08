@@ -13,7 +13,7 @@ const responderRoles = [
   "Legal Counsel",
 ] as const;
 
-type ResponderRole = (typeof responderRoles)[number];
+type ResponderRole = (typeof responderRoles)[number] | "Administrator";
 type AssignableRole = ResponderRole | "Administrator";
 type AuthMode = "signin" | "register" | "roles";
 
@@ -33,10 +33,11 @@ const roleDescriptions: Record<ResponderRole, string> = {
   "Incident Commander": "Coordinate response decisions and containment.",
   "Forensics Lead": "Preserve evidence and coordinate forensic review.",
   "Legal Counsel": "Review incident scope and support legal response.",
+  Administrator: "Manage responder accounts, roles, and incident response.",
 };
 
 function isResponderRole(value: unknown): value is ResponderRole {
-  return typeof value === "string" && responderRoles.includes(value as ResponderRole);
+  return value === "Administrator" || (typeof value === "string" && responderRoles.includes(value as (typeof responderRoles)[number]));
 }
 
 function reducerRole(role: AssignableRole): string {
@@ -56,6 +57,16 @@ function displayRole(role: string): string {
     case "commander": return "Incident Commander";
     case "legal": return "Legal Counsel";
     default: return role;
+  }
+}
+
+function responderRoleFromDatabase(role: string): ResponderRole {
+  switch (role) {
+    case "admin": return "Administrator";
+    case "commander": return "Incident Commander";
+    case "legal": return "Legal Counsel";
+    case "investigator": return "SOC Investigator";
+    default: throw new Error(`The signed-in responder has an unrecognized role: ${role}`);
   }
 }
 
@@ -184,10 +195,6 @@ export function AuthModal() {
       setError("Enter a username and passphrase to continue.");
       return;
     }
-    if (mode !== "register") {
-      setError("Sign-in verification is not available in the published reducers. Saved responder sessions reconnect automatically; register a new responder to create an account.");
-      return;
-    }
     if (!connection) {
       setError(connectionError || "SpacetimeDB is not connected. Try again when the connection is restored.");
       return;
@@ -197,12 +204,27 @@ export function AuthModal() {
     setError("");
     try {
       const passphraseHash = await hashPassphrase(passphrase);
-      await connection.reducers.signUp({
-        username: cleanUsername,
-        passphraseHash,
-        role: reducerRole(role),
-      });
-      const nextSession = { username: cleanUsername, role };
+      let nextRole: ResponderRole;
+      if (mode === "signin") {
+        const existingUser = Array.from(connection.db.user.iter())
+          .find((user) => user.username === cleanUsername);
+        await connection.reducers.signIn({
+          username: cleanUsername,
+          passphraseHash,
+        });
+        const authenticatedUser = Array.from(connection.db.user.iter())
+          .find((user) => user.username === cleanUsername);
+        nextRole = responderRoleFromDatabase(authenticatedUser?.role ?? existingUser?.role ?? "");
+      } else {
+        await connection.reducers.signUp({
+          username: cleanUsername,
+          passphraseHash,
+          role: reducerRole(role),
+        });
+        nextRole = role;
+      }
+
+      const nextSession = { username: cleanUsername, role: nextRole };
       saveSession(nextSession);
       setSession(nextSession);
       const savedSessionsValue: unknown = JSON.parse(localStorage.getItem("fumblebee_responder_sessions") ?? "[]");
@@ -212,7 +234,7 @@ export function AuthModal() {
       setPassphrase("");
       setError("");
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : "Responder registration failed.");
+      setError(submitError instanceof Error ? submitError.message : mode === "signin" ? "Sign in failed." : "Responder registration failed.");
     } finally {
       setSubmitting(false);
     }
@@ -373,18 +395,20 @@ export function AuthModal() {
                   Passphrase
                   <input type="password" value={passphrase} onChange={(event) => setPassphrase(event.target.value)} autoComplete={mode === "register" ? "new-password" : "current-password"} required />
                 </label>
-                <label>
-                  Responder role
-                  <select value={role} onChange={(event) => setRole(event.target.value as ResponderRole)}>
-                    {responderRoles.map((responderRole) => <option key={responderRole}>{responderRole}</option>)}
-                  </select>
-                </label>
-                <p className="auth-demo-notice">Registration hashes the passphrase with SHA-256 before sending it to the SpacetimeDB sign-up reducer. Sign-in requires a server reducer that is not currently published.</p>
+                {mode === "register" && (
+                  <label>
+                    Responder role
+                    <select value={role} onChange={(event) => setRole(event.target.value as ResponderRole)}>
+                      {responderRoles.map((responderRole) => <option key={responderRole}>{responderRole}</option>)}
+                    </select>
+                  </label>
+                )}
+                <p className="auth-demo-notice">{mode === "register" ? "Registration hashes the passphrase with SHA-256 before sending it to the SpacetimeDB sign-up reducer." : "Your passphrase is hashed with SHA-256 and verified by SpacetimeDB."}</p>
                 {(error || connectionError) && <p className="auth-error" role="alert">{error || connectionError}</p>}
                 <div className="modal-actions">
                   {session && <button className="button button-secondary" type="button" onClick={signOut}>Sign out</button>}
-                  <button className="button button-primary" type="submit" disabled={submitting || !connection || mode !== "register"}>
-                    {submitting ? "Registering..." : mode === "register" ? "Register Responder" : "Sign In"}
+                  <button className="button button-primary" type="submit" disabled={submitting || !connection}>
+                    {submitting ? mode === "register" ? "Registering..." : "Signing in..." : mode === "register" ? "Register Responder" : "Sign In"}
                   </button>
                 </div>
               </form>
