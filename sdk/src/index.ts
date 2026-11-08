@@ -47,6 +47,7 @@ export interface ActivityFeedEntry {
 export interface Asset {
   id: IdLike;
   incidentId?: bigint | number | string;
+  databaseId?: IdLike;
   assetKey?: string;
   name: string;
   assetType?: string;
@@ -54,6 +55,7 @@ export interface Asset {
   type?: string;
   riskLabel?: string;
   description?: string;
+  scopeStatus?: FrontendAsset["scopeStatus"];
 }
 
 export interface Relationship {
@@ -139,6 +141,8 @@ export interface FrontendAsset {
   type: FrontendAssetType | string;
   description: string;
   riskLabel: FrontendRiskLabel | string;
+  databaseId?: bigint;
+  scopeStatus?: "Exfiltrated" | "Ransomware Encrypted" | "Targeted" | "Quarantined";
 }
 
 export interface FrontendRelationship {
@@ -374,6 +378,12 @@ export function formatAttackGraph(
         type: asset.assetType ?? asset.type ?? 'resource',
         description: asset.description || '',
         riskLabel: asset.riskLabel ?? asset.riskLevel ?? 'Low',
+        databaseId: typeof asset.databaseId === 'bigint'
+          ? asset.databaseId
+          : asset.databaseId !== undefined
+            ? BigInt(asset.databaseId.toString())
+            : undefined,
+        scopeStatus: asset.scopeStatus,
       },
     },
     position: { x: 0, y: 0 },

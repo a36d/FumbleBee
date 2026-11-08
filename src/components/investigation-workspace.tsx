@@ -38,6 +38,7 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
   const [analysisRunning, setAnalysisRunning] = useState(false);
   const [analysisError, setAnalysisError] = useState("");
   const [assetActionPending, setAssetActionPending] = useState(false);
+  const [containmentError, setContainmentError] = useState("");
   const [mitigationGenerating, setMitigationGenerating] = useState(false);
   const [mitigationError, setMitigationError] = useState("");
   const [mitigationPlaybook, setMitigationPlaybook] = useState<MitigationPlaybook | null>(null);
@@ -423,26 +424,93 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
 
   async function executeContainment() {
     if (!selectedAsset) return;
-    if (!connection || selectedAsset.databaseId === undefined) {
-      setAnalysisError("This asset is not connected to a SpacetimeDB record, so containment cannot be applied.");
+    if (!connection) {
+      const message = "This asset is not connected to a SpacetimeDB record, so containment cannot be applied.";
+      console.error("[Containment] ", message);
+      setContainmentError(message);
+      setAnalysisError(message);
       return;
     }
 
     setAssetActionPending(true);
     setAnalysisError("");
+    setContainmentError("");
+
+    let resolvedAssetId = selectedAsset.databaseId;
+    if (resolvedAssetId === undefined) {
+      for (let attempt = 0; attempt < 8 && resolvedAssetId === undefined; attempt++) {
+        const liveRows = Array.from(connection.db.asset.iter()) as LiveAsset[];
+        const incidentAssets = liveRows.filter((row) => row.incidentId === 1n);
+        const normalizedName = selectedAsset.name.trim().toLowerCase();
+        const normalizedType = selectedAsset.type.trim().toLowerCase();
+        const matchedAsset = incidentAssets.find((row) => row.assetKey === selectedAsset.id)
+          ?? incidentAssets.find((row) => row.name.trim().toLowerCase() === normalizedName)
+          ?? incidentAssets.find((row) => row.assetType.trim().toLowerCase() === normalizedType);
+
+        if (matchedAsset) {
+          resolvedAssetId = matchedAsset.id;
+          setSelectedAsset((current) => current
+            ? { ...current, databaseId: matchedAsset.id }
+            : current);
+        } else if (attempt < 7) {
+          await new Promise((resolve) => setTimeout(resolve, 250));
+        }
+      }
+    } else {
+      try {
+        resolvedAssetId = BigInt(resolvedAssetId.toString());
+      } catch {
+        resolvedAssetId = undefined;
+      }
+    }
+
+    if (resolvedAssetId === undefined) {
+      const message = `No matching SpacetimeDB Asset row was found for "${selectedAsset.name}". Run analysis again so the asset can be registered, then retry containment.`;
+      console.error("[Containment] Asset resolution failed:", {
+        assetId: selectedAsset.id,
+        assetName: selectedAsset.name,
+        assetType: selectedAsset.type,
+      });
+      setContainmentError(message);
+      setAnalysisError(message);
+      setAssetActionPending(false);
+      return;
+    }
+
     const actionType = getContainmentActionType(selectedAsset.type);
+    if (!actionType) {
+      const message = "Unsupported asset type for containment.";
+      console.error("[Containment] ", message, selectedAsset.type);
+      setContainmentError(message);
+      setAssetActionPending(false);
+      return;
+    }
     const command = mitigationPlaybook?.assetId === selectedAsset.id
       ? mitigationPlaybook.command
       : `containment.request --asset "${selectedAsset.name}" --action "${actionType}" --mode record-only`;
     const mitigationDetails = `Applied forensic action for ${selectedAsset.name}: ${command}. ${mitigationPlaybook?.assetId === selectedAsset.id ? mitigationPlaybook.notice : "FumbleBee records the action; no infrastructure adapter is configured."}`;
     try {
       await connection.reducers.applyAssetContainment({
-        assetId: selectedAsset.databaseId,
+        assetId: BigInt(resolvedAssetId),
         actionType,
         mitigationDetails,
       });
+
+      const assetId = selectedAsset.id;
+      assetScopesRef.current = { ...assetScopesRef.current, [assetId]: "Quarantined" };
+      setAssetScopes((current) => ({ ...current, [assetId]: "Quarantined" }));
+      setSelectedAsset((current) => current
+        ? { ...current, scopeStatus: "Quarantined" }
+        : current);
+      setGraph((current) => ({
+        ...current,
+        nodes: applyAssetScopes(current.nodes) as typeof current.nodes,
+      }));
     } catch (error) {
-      setAnalysisError(error instanceof Error ? error.message : "Asset containment failed.");
+      const message = error instanceof Error ? error.message : "Asset containment failed.";
+      console.error("[Containment] applyAssetContainment rejected:", error);
+      setContainmentError(message);
+      setAnalysisError(message);
     } finally {
       setAssetActionPending(false);
     }
@@ -663,6 +731,7 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
                 <button className="containment-button" onClick={() => void executeContainment()} disabled={assetActionPending || selectedAssetScope === "Quarantined"}>
                   {assetActionPending ? <><LoaderCircle className="spin" size={15} /> Applying containment...</> : selectedAssetScope === "Quarantined" ? <><ShieldCheck size={16} /> Asset Quarantined</> : "Execute Out-of-Band Containment"}
                 </button>
+                {containmentError && <p className="mitigation-error" role="alert">{containmentError}</p>}
               </section>
               <section className="asset-detail-section">
                 <span className="summary-label">RELATED RECOMMENDATIONS</span>
