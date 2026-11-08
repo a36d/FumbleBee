@@ -282,6 +282,40 @@ export const signUp = spacetime.reducer(
   },
 );
 
+export const signIn = spacetime.reducer(
+  { username: t.string(), passphraseHash: t.string() },
+  (ctx: any, args: any) => {
+    const username = args.username.trim();
+    let existing: any = null;
+    for (const userRow of ctx.db.user.iter()) {
+      if (userRow.username === username) {
+        existing = userRow;
+        break;
+      }
+    }
+    if (!existing || existing.passphraseHash !== args.passphraseHash) {
+      throw new SenderError('Invalid credentials');
+    }
+
+    const existingHex = existing.identity.toHexString();
+    const senderHex = ctx.sender.toHexString();
+    if (existingHex !== senderHex) {
+      const senderRow = ctx.db.user.identity.find(ctx.sender);
+      if (senderRow) {
+        ctx.db.user.identity.delete(ctx.sender);
+      }
+      ctx.db.user.identity.delete(existing.identity);
+      ctx.db.user.insert({
+        ...existing,
+        identity: ctx.sender,
+        createdAt: ctx.timestamp,
+      });
+    }
+
+    appendAudit(ctx, `USER_AUTHENTICATED: [${existing.username}] as [${existing.role}]`, null);
+  },
+);
+
 export const assignUserRole = spacetime.reducer(
   { targetIdentity: t.identity(), newRole: t.string() },
   (ctx: any, args: any) => {

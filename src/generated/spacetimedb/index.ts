@@ -42,6 +42,7 @@ import CreateIncidentReducer from "./create_incident_reducer";
 import CreateUserReducer from "./create_user_reducer";
 import DeleteUserReducer from "./delete_user_reducer";
 import SetUserRoleReducer from "./set_user_role_reducer";
+import SignInReducer from "./sign_in_reducer";
 import SignUpReducer from "./sign_up_reducer";
 import UpdateAssetCompromiseStatusReducer from "./update_asset_compromise_status_reducer";
 import UpdateIncidentReducer from "./update_incident_reducer";
@@ -165,6 +166,7 @@ const reducersSchema = __reducers(
   __reducerSchema("create_user", CreateUserReducer),
   __reducerSchema("delete_user", DeleteUserReducer),
   __reducerSchema("set_user_role", SetUserRoleReducer),
+  __reducerSchema("sign_in", SignInReducer),
   __reducerSchema("sign_up", SignUpReducer),
   __reducerSchema("update_asset_compromise_status", UpdateAssetCompromiseStatusReducer),
   __reducerSchema("update_incident", UpdateIncidentReducer),
