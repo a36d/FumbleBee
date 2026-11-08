@@ -97,7 +97,7 @@ function isSavedResponderSession(value: unknown): value is SavedResponderSession
   );
 }
 
-export function AuthModal() {
+export function AuthModal({ externalOpenToken = 0 }: { externalOpenToken?: number }) {
   const { connection, connectionError, saveSession, switchSession } = useSpacetimeConnection();
   const [session, setSession] = useState<ResponderSession | null>(null);
   const [hydrated, setHydrated] = useState(false);
@@ -113,6 +113,14 @@ export function AuthModal() {
   const [newRole, setNewRole] = useState<AssignableRole>("SOC Investigator");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (externalOpenToken > 0) {
+      setMode("roles");
+      setError("");
+      setOpen(true);
+    }
+  }, [externalOpenToken]);
 
   useEffect(() => {
     try {
@@ -326,10 +334,16 @@ export function AuthModal() {
                 <div className="auth-session-switcher">
                   <label htmlFor="saved-responder-session">Switch active responder</label>
                   <div>
-                    <select id="saved-responder-session" value={sessionToSwitch} onChange={(event) => setSessionToSwitch(event.target.value)}>
-                      <option value="">Select a saved responder</option>
+                    <select
+                      id="saved-responder-session"
+                      className="bg-zinc-900 text-zinc-100 border border-zinc-700"
+                      value={sessionToSwitch}
+                      onChange={(event) => setSessionToSwitch(event.target.value)}
+                      style={{ backgroundColor: "#18181b", color: "#f4f4f5", borderColor: "#3f3f46" }}
+                    >
+                      <option className="bg-zinc-900 text-zinc-100" value="">Select a saved responder</option>
                       {savedSessions.map((saved) => (
-                        <option key={saved.username} value={saved.username}>
+                        <option className="bg-zinc-900 text-zinc-100" key={saved.username} value={saved.username}>
                           {saved.username} · {compactRole(saved.role)}{saved.username === session?.username ? " (active)" : ""}
                         </option>
                       ))}

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import Image from "next/image";
 import { Bell, ChevronDown, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AuthModal } from "@/components/auth-modal";
 import { ProfileDialog } from "@/components/profile-dialog";
 import { SpacetimeConnectionProvider } from "@/components/spacetime-connection-provider";
@@ -115,6 +115,20 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const isIncidents = pathname === "/incidents";
   const investigationMatch = pathname.match(/^\/investigations\/([^/?#]+)/);
   const incidentId = investigationMatch?.[1] ?? null;
+  const [authOpenToken, setAuthOpenToken] = useState(0);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const notificationRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!notificationsOpen) return;
+    const closeNotifications = (event: MouseEvent) => {
+      if (!notificationRef.current?.contains(event.target as Node)) {
+        setNotificationsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", closeNotifications);
+    return () => document.removeEventListener("mousedown", closeNotifications);
+  }, [notificationsOpen]);
 
   return (
     <SpacetimeConnectionProvider>
@@ -124,7 +138,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <Image className="brand-logo" src="/fumblebee-bee.png" alt="" width={42} height={42} priority />
           <span className="brand-name">FumbleBee</span>
         </Link>
-        <div className="workspace-switch"><span className="workspace-icon">A</span><span className="workspace-copy"><strong>Acme Corporation</strong><small>Enterprise workspace</small></span><ChevronDown size={14} /></div>
+        <button
+          type="button"
+          className="workspace-switch"
+          onClick={() => setAuthOpenToken((current) => current + 1)}
+          aria-label="Open Acme Corporation organization and role management"
+        >
+          <span className="workspace-icon">A</span>
+          <span className="workspace-copy"><strong>Acme Corporation</strong><small>Enterprise workspace</small></span>
+          <ChevronDown size={14} />
+        </button>
         <div className="nav-label">WORKSPACE</div>
         <WorkspaceNavigation isInvestigation={isInvestigation} isIncidents={isIncidents} incidentId={incidentId} />
         <div className="sidebar-bottom">
@@ -135,7 +158,35 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <div className="main-column">
         <header className="topbar">
           <div className="breadcrumbs"><span>Workspace</span><span className="crumb-slash">/</span><strong>{isInvestigation ? "Investigation" : isIncidents ? "Security Incidents" : "Overview"}</strong></div>
-          <div className="topbar-actions"><button className="icon-button notification-button" aria-label="Notifications"><Bell size={17} /><i /></button><div className="topbar-divider" /><AuthModal /></div>
+          <div className="topbar-actions">
+            <div className="notification-popover-anchor" ref={notificationRef}>
+              <button
+                type="button"
+                className="icon-button notification-button"
+                aria-label="Notifications"
+                aria-expanded={notificationsOpen}
+                onClick={() => setNotificationsOpen((current) => !current)}
+              >
+                <Bell size={17} />
+                <i />
+              </button>
+              {notificationsOpen && (
+                <div className="notification-popover" role="dialog" aria-label="Recent notifications">
+                  <div className="notification-popover-heading">
+                    <strong>System notifications</strong>
+                    <span>3 recent</span>
+                  </div>
+                  <ul>
+                    <li><span className="notification-severity critical">CRITICAL</span><p>Ransomware canary alert triggered on Corporate Endpoint</p></li>
+                    <li><span className="notification-severity">CONTAINMENT</span><p>Containment policy deployed by active responder</p></li>
+                    <li><span className="notification-severity verified">VERIFIED</span><p>Audit log sequence cryptographically verified (SHA-256)</p></li>
+                  </ul>
+                </div>
+              )}
+            </div>
+            <div className="topbar-divider" />
+            <AuthModal externalOpenToken={authOpenToken} />
+          </div>
         </header>
         <main className="page-content">{children}</main>
       </div>

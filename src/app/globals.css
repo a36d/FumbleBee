@@ -36,6 +36,8 @@ a { color: inherit; text-decoration: none; }
 .brand strong span { color: #88a9aa; }
 .brand small { display: block; margin-top: 3px; color: #638286; font-size: 8px; letter-spacing: 1.15px; font-weight: 700; }
 .workspace-switch { display: flex; align-items: center; gap: 9px; margin: 28px 1px 27px; padding: 10px 9px; border: 1px solid #102f35; border-radius: 7px; background: #102f35; color: #638286; }
+.workspace-switch { width: calc(100% - 2px); text-align: left; cursor: pointer; font: inherit; }
+.workspace-switch:hover { border-color: #95b0b0; background: #173f45; }
 .workspace-icon { display: grid; flex: 0 0 auto; place-items: center; width: 28px; height: 28px; border-radius: 6px; background: linear-gradient(145deg, #102f35, #102f35); color: #adbfbd; font-weight: 700; font-size: 12px; }
 .workspace-copy { min-width: 0; flex: 1; }
 .workspace-copy strong, .workspace-copy small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -82,6 +84,18 @@ a { color: inherit; text-decoration: none; }
 .icon-button, .small-icon-button { display: grid; place-items: center; padding: 0; border: 0; background: transparent; color: #638286; cursor: pointer; }
 .notification-button { position: relative; }
 .notification-button i { position: absolute; top: -2px; right: -2px; width: 5px; height: 5px; border-radius: 50%; background: var(--rose); box-shadow: 0 0 5px rgba(224, 203, 112, .5); }
+.notification-popover-anchor { position: relative; display: flex; }
+.notification-popover { position: absolute; z-index: 30; top: 38px; right: -8px; width: 330px; border: 1px solid #3c686d; border-radius: 8px; background: #102f35; box-shadow: 0 14px 36px rgba(16, 47, 53, .4); overflow: hidden; }
+.notification-popover-heading { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; border-bottom: 1px solid #173f45; }
+.notification-popover-heading strong { color: #cbd9d5; font-size: 11px; }
+.notification-popover-heading span { color: #638286; font-size: 9px; text-transform: uppercase; }
+.notification-popover ul { margin: 0; padding: 0; list-style: none; }
+.notification-popover li { display: grid; grid-template-columns: 82px 1fr; gap: 9px; padding: 12px 14px; border-bottom: 1px solid rgba(60, 104, 109, .45); }
+.notification-popover li:last-child { border-bottom: 0; }
+.notification-popover li p { margin: 0; color: #adbfbd; font-size: 10px; line-height: 1.45; }
+.notification-severity { align-self: start; color: #e0cb70; font-size: 8px; font-weight: 800; letter-spacing: .35px; }
+.notification-severity.critical { color: #d28a8d; }
+.notification-severity.verified { color: #88a9aa; }
 .topbar-divider { width: 1px; height: 22px; background: #102f35; margin-left: -6px; margin-right: -6px; }
 .page-content { max-width: 1600px; margin: 0 auto; padding: 32px 34px 46px; }
 
@@ -1589,6 +1603,11 @@ body { color: var(--text); }
 .auth-modal .modal-form select:focus { border-color: #806b2a; box-shadow: 0 0 0 2px rgba(213, 187, 82, .25); }
 .auth-demo-notice { margin: 0; color: #3c686d; font-size: 10px; line-height: 1.5; }
 .auth-error { margin: 0; color: #91353c; font-size: 11px; font-weight: 700; }
+.auth-session-switcher select,
+.auth-session-switcher option {
+  background-color: #18181b !important;
+  color: #f4f4f5 !important;
+}
 .auth-role-management { display: grid; gap: 12px; padding-top: 14px; }
 .auth-role-form { display: grid; gap: 10px; padding: 11px; border: 1px solid #88a9aa; border-radius: 6px; background: #cbd9d5; }
 .auth-role-form label { display: grid; gap: 6px; color: #173f45; font-size: 10px; font-weight: 700; }
