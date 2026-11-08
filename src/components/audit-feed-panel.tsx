@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Check, Clipboard } from "lucide-react";
 
 export interface AuditFeedActivity {
@@ -14,6 +14,9 @@ export interface AuditFeedEntry {
   sequenceId: string | bigint;
   action: string;
   timestamp: string | Date;
+  timestampMicros: string;
+  actorIdentity: string;
+  incidentId: string | null;
   currentHash: string;
   previousHash: string;
 }
@@ -21,9 +24,11 @@ export interface AuditFeedEntry {
 interface AuditFeedPanelProps {
   activities: AuditFeedActivity[];
   auditEntries: AuditFeedEntry[];
+  incidentId: string;
 }
 
 type PanelTab = "activity" | "audit";
+type VerificationState = "pending" | "verified" | "invalid" | "unavailable";
 
 function sequenceNumber(sequenceId: string | bigint): number {
   const parsed = Number(sequenceId);
@@ -52,10 +57,11 @@ function truncateHash(hash: string): string {
   return hash.length > 12 ? `${hash.slice(0, 4)}...${hash.slice(-4)}` : hash;
 }
 
-export function AuditFeedPanel({ activities, auditEntries }: AuditFeedPanelProps) {
+export function AuditFeedPanel({ activities, auditEntries, incidentId }: AuditFeedPanelProps) {
   const [activeTab, setActiveTab] = useState<PanelTab>("activity");
   const [copiedHash, setCopiedHash] = useState<string | null>(null);
   const [copyError, setCopyError] = useState("");
+  const [verification, setVerification] = useState<VerificationState>("pending");
 
   const chronologicalActivities = useMemo(
     () => [...activities].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
@@ -65,9 +71,41 @@ export function AuditFeedPanel({ activities, auditEntries }: AuditFeedPanelProps
     () => [...auditEntries].sort((a, b) => sequenceNumber(b.sequenceId) - sequenceNumber(a.sequenceId)),
     [auditEntries],
   );
-  const integrityVerified = useMemo(() => {
-    const ascending = [...auditEntries].sort((a, b) => sequenceNumber(a.sequenceId) - sequenceNumber(b.sequenceId));
-    return ascending.every((entry, index) => index === 0 || entry.previousHash === ascending[index - 1].currentHash);
+  const visibleAuditEntries = useMemo(
+    () => orderedAuditEntries.filter((entry) => entry.incidentId === incidentId),
+    [incidentId, orderedAuditEntries],
+  );
+
+  useEffect(() => {
+    let active = true;
+    if (auditEntries.length === 0) {
+      setVerification("pending");
+      return () => { active = false; };
+    }
+    if (!globalThis.crypto?.subtle) {
+      setVerification("unavailable");
+      return () => { active = false; };
+    }
+
+    async function verifyAuditChain() {
+      const ascending = [...auditEntries].sort((a, b) => sequenceNumber(a.sequenceId) - sequenceNumber(b.sequenceId));
+      if (ascending[0].previousHash !== "0".repeat(64)) return false;
+      for (let index = 0; index < ascending.length; index += 1) {
+        const entry = ascending[index];
+        if (index > 0 && entry.previousHash !== ascending[index - 1].currentHash) return false;
+        const hashInput = `${entry.action}${entry.actorIdentity}${entry.timestampMicros}${entry.previousHash}`;
+        const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(hashInput));
+        const computedHash = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+        if (computedHash !== entry.currentHash.toLowerCase()) return false;
+      }
+      return true;
+    }
+
+    void verifyAuditChain()
+      .then((verified) => { if (active) setVerification(verified ? "verified" : "invalid"); })
+      .catch(() => { if (active) setVerification("unavailable"); });
+
+    return () => { active = false; };
   }, [auditEntries]);
 
   async function copyHash(hash: string) {
@@ -91,8 +129,8 @@ export function AuditFeedPanel({ activities, auditEntries }: AuditFeedPanelProps
           </div>
         </div>
         {activeTab === "audit" && auditEntries.length > 0 && (
-          <span className={`audit-integrity-badge ${integrityVerified ? "" : "audit-integrity-warning"}`}>
-            {integrityVerified ? "Integrity Verified" : "Chain Mismatch"}
+          <span className={`audit-integrity-badge ${verification !== "verified" ? "audit-integrity-warning" : ""}`}>
+            {verification === "verified" ? "Integrity Verified" : verification === "pending" ? "Verifying Chain..." : verification === "unavailable" ? "Verification Unavailable" : "Chain Mismatch"}
           </span>
         )}
       </header>
@@ -138,7 +176,7 @@ export function AuditFeedPanel({ activities, auditEntries }: AuditFeedPanelProps
       ) : (
         <div className="audit-feed-content" id="audit-panel" role="tabpanel" aria-labelledby="audit-tab">
           {copyError && <p className="audit-copy-error" role="alert">{copyError}</p>}
-          {orderedAuditEntries.length ? orderedAuditEntries.map((entry) => (
+          {visibleAuditEntries.length ? visibleAuditEntries.map((entry) => (
             <article className="audit-log-item" key={String(entry.sequenceId)}>
               <div className="audit-log-topline">
                 <span className="audit-log-sequence">#{String(entry.sequenceId)}</span>
@@ -161,8 +199,8 @@ export function AuditFeedPanel({ activities, auditEntries }: AuditFeedPanelProps
               </div>
             </article>
           )) : <p className="audit-feed-empty">No immutable audit entries are available.</p>}
-          {integrityVerified && auditEntries.length > 0 && (
-            <div className="audit-chain-note">Each entry links to the previous record in the chain.</div>
+          {verification === "verified" && visibleAuditEntries.length > 0 && (
+            <div className="audit-chain-note">Hashes and previous links are verified against the full audit chain.</div>
           )}
         </div>
       )}

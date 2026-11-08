@@ -2,6 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { X } from "lucide-react";
+import { tables } from "@/generated/spacetimedb";
+import type { User } from "@/generated/spacetimedb/types";
+import { useSpacetimeConnection } from "@/components/spacetime-connection-provider";
 
 const responderRoles = [
   "SOC Investigator",
@@ -11,12 +14,15 @@ const responderRoles = [
 ] as const;
 
 type ResponderRole = (typeof responderRoles)[number];
+type AssignableRole = ResponderRole | "Administrator";
 type AuthMode = "signin" | "register" | "roles";
 
 interface ResponderSession {
   username: string;
   role: ResponderRole;
 }
+
+type ResponderAccount = Pick<User, "identity" | "username" | "role">;
 
 const roleDescriptions: Record<ResponderRole, string> = {
   "SOC Investigator": "Investigate alerts and document incident evidence.",
@@ -29,7 +35,36 @@ function isResponderRole(value: unknown): value is ResponderRole {
   return typeof value === "string" && responderRoles.includes(value as ResponderRole);
 }
 
+function reducerRole(role: AssignableRole): string {
+  switch (role) {
+    case "SOC Investigator":
+    case "Forensics Lead": return "investigator";
+    case "Incident Commander": return "commander";
+    case "Legal Counsel": return "legal";
+    case "Administrator": return "admin";
+  }
+}
+
+function displayRole(role: string): string {
+  switch (role) {
+    case "admin": return "Administrator";
+    case "investigator": return "SOC Investigator";
+    case "commander": return "Incident Commander";
+    case "legal": return "Legal Counsel";
+    default: return role;
+  }
+}
+
+async function hashPassphrase(passphrase: string): Promise<string> {
+  if (!globalThis.crypto?.subtle) {
+    throw new Error("Secure passphrase hashing is unavailable in this browser.");
+  }
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(passphrase));
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
 export function AuthModal() {
+  const { connection, connectionError, saveSession } = useSpacetimeConnection();
   const [session, setSession] = useState<ResponderSession | null>(null);
   const [hydrated, setHydrated] = useState(false);
   const [mode, setMode] = useState<AuthMode>("signin");
@@ -37,6 +72,10 @@ export function AuthModal() {
   const [username, setUsername] = useState("");
   const [passphrase, setPassphrase] = useState("");
   const [role, setRole] = useState<ResponderRole>("SOC Investigator");
+  const [users, setUsers] = useState<ResponderAccount[]>([]);
+  const [targetIdentity, setTargetIdentity] = useState("");
+  const [newRole, setNewRole] = useState<AssignableRole>("SOC Investigator");
+  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -62,29 +101,83 @@ export function AuthModal() {
     }
   }, []);
 
+  useEffect(() => {
+    if (!connection) {
+      setUsers([]);
+      return;
+    }
+
+    let active = true;
+    const refreshUsers = () => {
+      if (active) {
+        setUsers(Array.from(connection.db.user.iter(), ({ identity, username, role }) => ({
+          identity,
+          username,
+          role,
+        })));
+      }
+    };
+    connection.db.user.onInsert(refreshUsers);
+    connection.db.user.onUpdate(refreshUsers);
+    connection.db.user.onDelete(refreshUsers);
+    const subscription = connection.subscriptionBuilder()
+      .onApplied(refreshUsers)
+      .onError((context) => {
+        if (active) setError(`Could not load responder accounts: ${context.event?.message ?? "unknown subscription error"}`);
+      })
+      .subscribe([tables.user]);
+
+    return () => {
+      active = false;
+      connection.db.user.removeOnInsert(refreshUsers);
+      connection.db.user.removeOnUpdate(refreshUsers);
+      connection.db.user.removeOnDelete(refreshUsers);
+      subscription.unsubscribe();
+    };
+  }, [connection]);
+
   function openModal(nextMode: AuthMode) {
     setMode(nextMode);
     setError("");
     setOpen(true);
   }
 
-  function submitSession(event: React.FormEvent<HTMLFormElement>) {
+  async function submitSession(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const cleanUsername = username.trim();
     if (!cleanUsername || !passphrase) {
       setError("Enter a username and passphrase to continue.");
       return;
     }
+    if (mode !== "register") {
+      setError("Sign-in verification is not available in the published reducers. Saved responder sessions reconnect automatically; register a new responder to create an account.");
+      return;
+    }
+    if (!connection) {
+      setError(connectionError || "SpacetimeDB is not connected. Try again when the connection is restored.");
+      return;
+    }
 
-    const nextSession = { username: cleanUsername, role };
+    setSubmitting(true);
+    setError("");
     try {
-      localStorage.setItem("fumblebee_session", JSON.stringify(nextSession));
+      const passphraseHash = await hashPassphrase(passphrase);
+      await connection.reducers.signUp({
+        username: cleanUsername,
+        passphraseHash,
+        role: reducerRole(role),
+      });
+      const nextSession = { username: cleanUsername, role };
+      saveSession(nextSession);
       setSession(nextSession);
       setOpen(false);
+      setUsername("");
       setPassphrase("");
       setError("");
-    } catch {
-      setError("Responder session could not be saved in this browser.");
+    } catch (submitError) {
+      setError(submitError instanceof Error ? submitError.message : "Responder registration failed.");
+    } finally {
+      setSubmitting(false);
     }
   }
 
@@ -95,8 +188,35 @@ export function AuthModal() {
       setUsername("");
       setPassphrase("");
       setError("");
+      window.location.reload();
     } catch {
       setError("Responder session could not be cleared.");
+    }
+  }
+
+  async function assignRole(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!connection) {
+      setError(connectionError || "SpacetimeDB is not connected. Try again when the connection is restored.");
+      return;
+    }
+    const target = users.find((user) => user.identity.toHexString() === targetIdentity);
+    if (!target) {
+      setError("Select an existing responder account.");
+      return;
+    }
+
+    setSubmitting(true);
+    setError("");
+    try {
+      await connection.reducers.assignUserRole({
+        targetIdentity: target.identity,
+        newRole: reducerRole(newRole),
+      });
+    } catch (assignError) {
+      setError(assignError instanceof Error ? assignError.message : "Responder role update failed.");
+    } finally {
+      setSubmitting(false);
     }
   }
 
@@ -127,7 +247,7 @@ export function AuthModal() {
                 <h2 id="auth-modal-title">
                   {mode === "roles" ? "Responder roles" : mode === "register" ? "Register incident responder" : "Sign in"}
                 </h2>
-                <p>Manage the local responder identity for this demo workspace.</p>
+                <p>Manage the responder identity for this workspace.</p>
               </div>
               <button className="icon-button" onClick={() => setOpen(false)} aria-label="Close responder access dialog"><X size={17} /></button>
             </div>
@@ -139,6 +259,33 @@ export function AuthModal() {
 
             {mode === "roles" ? (
               <div className="auth-role-management">
+                <form className="auth-role-form" onSubmit={assignRole}>
+                  <label>
+                    Responder account
+                    <select value={targetIdentity} onChange={(event) => setTargetIdentity(event.target.value)} required>
+                      <option value="">Select a registered account</option>
+                      {users.map((user) => (
+                        <option key={user.identity.toHexString()} value={user.identity.toHexString()}>
+                          {user.username} · {displayRole(user.role)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    Assign role
+                    <select value={newRole} onChange={(event) => setNewRole(event.target.value as AssignableRole)}>
+                      <option>SOC Investigator</option>
+                      <option>Incident Commander</option>
+                      <option>Forensics Lead</option>
+                      <option>Legal Counsel</option>
+                      <option>Administrator</option>
+                    </select>
+                  </label>
+                  <button className="button button-primary" type="submit" disabled={submitting || !connection}>
+                    {submitting ? "Updating role..." : "Assign Role"}
+                  </button>
+                </form>
+                <p className="auth-demo-notice">Role changes are authorized by the SpacetimeDB admin-only reducer.</p>
                 <div className="auth-role-list">
                   {responderRoles.map((responderRole) => (
                     <article key={responderRole}>
@@ -165,15 +312,17 @@ export function AuthModal() {
                     {responderRoles.map((responderRole) => <option key={responderRole}>{responderRole}</option>)}
                   </select>
                 </label>
-                <p className="auth-demo-notice">Demo only: the passphrase is not stored or sent to an authentication service. Only responder name and role are saved in this browser.</p>
-                {error && <p className="auth-error" role="alert">{error}</p>}
+                <p className="auth-demo-notice">Registration hashes the passphrase with SHA-256 before sending it to the SpacetimeDB sign-up reducer. Sign-in requires a server reducer that is not currently published.</p>
+                {(error || connectionError) && <p className="auth-error" role="alert">{error || connectionError}</p>}
                 <div className="modal-actions">
                   {session && <button className="button button-secondary" type="button" onClick={signOut}>Sign out</button>}
-                  <button className="button button-primary" type="submit">{mode === "register" ? "Register Responder" : "Sign In"}</button>
+                  <button className="button button-primary" type="submit" disabled={submitting || !connection || mode !== "register"}>
+                    {submitting ? "Registering..." : mode === "register" ? "Register Responder" : "Sign In"}
+                  </button>
                 </div>
               </form>
             )}
-            {mode === "roles" && error && <p className="auth-error" role="alert">{error}</p>}
+            {mode === "roles" && (error || connectionError) && <p className="auth-error" role="alert">{error || connectionError}</p>}
           </section>
         </div>
       )}

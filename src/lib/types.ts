@@ -27,6 +27,7 @@ export interface Asset {
   description: string;
   riskLabel: string;
   scopeStatus?: AssetScopeStatus;
+  databaseId?: bigint;
 }
 
 export interface Relationship {

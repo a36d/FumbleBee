@@ -5,12 +5,14 @@ import { usePathname } from "next/navigation";
 import Image from "next/image";
 import { Bell, ChevronDown, Command } from "lucide-react";
 import { AuthModal } from "@/components/auth-modal";
+import { SpacetimeConnectionProvider } from "@/components/spacetime-connection-provider";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const isInvestigation = pathname.startsWith("/investigations/");
 
   return (
+    <SpacetimeConnectionProvider>
     <div className="app-shell">
       <aside className="sidebar">
         <Link href="/" className="brand">
@@ -38,5 +40,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <main className="page-content">{children}</main>
       </div>
     </div>
+    </SpacetimeConnectionProvider>
   );
 }

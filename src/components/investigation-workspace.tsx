@@ -6,7 +6,6 @@ import Link from "next/link";
 import type { Node } from "@xyflow/react";
 import { createSentinelGraphClient, formatAttackGraph, type AiAnalysisInput } from "@/sdk/src/index";
 import {
-  DbConnection,
   tables,
 } from "@/generated/spacetimedb";
 import type { ActivityFeed as LiveActivity, Asset as LiveAsset, AuditLog as LiveAuditLog, Incident as LiveIncident, InvestigationNote as LiveNote, Relationship as LiveRelationship } from "@/generated/spacetimedb/types";
@@ -16,8 +15,10 @@ import type { ActivityFeed, Asset as FrontendAsset, AssetScopeStatus, Incident a
 import { AttackGraph } from "@/components/attack-graph";
 import { AuditFeedPanel, type AuditFeedActivity, type AuditFeedEntry } from "@/components/audit-feed-panel";
 import { SeverityBadge, StatusBadge } from "@/components/severity-badge";
+import { useSpacetimeConnection } from "@/components/spacetime-connection-provider";
 
 export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
+  const { connection } = useSpacetimeConnection();
   const fallbackIncident = useMemo(() => incidents.find((item) => item.id === incidentId) ?? incidents[0], [incidentId]);
   const [liveIncident, setLiveIncident] = useState<FrontendIncident | null>(null);
   const incident = liveIncident ?? fallbackIncident;
@@ -28,6 +29,7 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
   const [noteText, setNoteText] = useState("");
   const [analysisRunning, setAnalysisRunning] = useState(false);
   const [analysisError, setAnalysisError] = useState("");
+  const [assetActionPending, setAssetActionPending] = useState(false);
   const [resetRunning, setResetRunning] = useState(false);
   const [resetNotice, setResetNotice] = useState("");
   const [analysisResult, setAnalysisResult] = useState<AiAnalysisInput | null>(null);
@@ -97,10 +99,8 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
   }
 
   useEffect(() => {
-    let connection: DbConnection | null = null;
+    if (!connection) return;
     const refreshIncidentAndGraph = () => {
-      if (!connection) return;
-
       const incidentRows = Array.from(connection.db.incident.iter()) as LiveIncident[];
       const liveRow = incidentRows.find((row) => row.id === 1n);
       if (liveRow) {
@@ -159,11 +159,13 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
       setLiveActivities(currentActivities);
 
       const currentAuditEntries = (Array.from(connection.db.auditLog.iter()) as LiveAuditLog[])
-        .filter((row) => row.incidentId === 1n)
         .map((row): AuditFeedEntry => ({
           sequenceId: row.sequenceId,
           action: row.action,
           timestamp: new Date(Number(row.timestamp.microsSinceUnixEpoch / 1000n)),
+          timestampMicros: row.timestamp.microsSinceUnixEpoch.toString(),
+          actorIdentity: row.actorIdentity.toHexString(),
+          incidentId: row.incidentId == null ? null : row.incidentId.toString(),
           currentHash: row.currentHash,
           previousHash: row.previousHash,
         }));
@@ -171,13 +173,26 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
 
       const liveAssets = (Array.from(connection.db.asset.iter()) as LiveAsset[])
         .filter((row) => row.incidentId === 1n)
-        .map((row): FrontendAsset => ({
-          id: row.assetKey || row.id.toString(),
-          name: row.name,
-          type: row.assetType as FrontendAsset["type"],
-          description: row.description || "",
-          riskLabel: row.riskLevel,
-        }));
+        .map((row): FrontendAsset => {
+          const scopeStatus = toAssetScopeStatus(row.compromiseStatus);
+          return {
+            id: row.assetKey || row.id.toString(),
+            databaseId: row.id,
+            name: row.name,
+            type: row.assetType as FrontendAsset["type"],
+            description: row.description || "",
+            riskLabel: row.riskLevel,
+            scopeStatus,
+          };
+        });
+      const liveScopes = Object.fromEntries(liveAssets
+        .filter((asset): asset is FrontendAsset & { scopeStatus: AssetScopeStatus } => asset.scopeStatus !== undefined)
+        .map((asset) => [asset.id, asset.scopeStatus]));
+      assetScopesRef.current = { ...assetScopesRef.current, ...liveScopes };
+      setAssetScopes((current) => ({ ...current, ...liveScopes }));
+      setSelectedAsset((current) => current
+        ? liveAssets.find((asset) => asset.id === current.id) ?? current
+        : null);
 
       const liveRelationships = (Array.from(connection.db.relationship.iter()) as LiveRelationship[])
         .filter((row) => row.incidentId === 1n)
@@ -194,20 +209,17 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
       }
     };
 
-    connection = DbConnection.builder()
-      .withUri("http://localhost:3000")
-      .withDatabaseName("sentinelgraph")
-      .onConnect((connected) => {
-        connected.subscriptionBuilder().onApplied(refreshIncidentAndGraph).subscribe([
-          tables.incident,
-          tables.investigationNote,
-          tables.asset,
-          tables.relationship,
-          tables.activityFeed,
-          tables.auditLog,
-        ]);
-      })
-      .build();
+    const subscription = connection.subscriptionBuilder()
+      .onApplied(refreshIncidentAndGraph)
+      .onError((context) => setAnalysisError(`Live SpacetimeDB subscription failed: ${context.event?.message ?? "unknown subscription error"}`))
+      .subscribe([
+        tables.incident,
+        tables.investigationNote,
+        tables.asset,
+        tables.relationship,
+        tables.activityFeed,
+        tables.auditLog,
+      ]);
 
     const refreshOnTableChange = () => refreshIncidentAndGraph();
     connection.db.incident.onInsert(refreshOnTableChange);
@@ -235,16 +247,15 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
       transport: {
         reducer: {
           call: (_name, args) => {
-            if (!connection) return;
             if (_name === "applyAiAnalysis") {
               const reducers = connection.reducers as unknown as {
                 applyAiAnalysis: (args: Record<string, unknown>) => void;
               };
-              reducers.applyAiAnalysis(args);
+              void reducers.applyAiAnalysis(args);
               return;
             }
             const reducers = connection.reducers as unknown as Record<string, (args: Record<string, unknown>) => void>;
-            reducers[_name]?.(args);
+            void reducers[_name]?.(args);
           },
         },
       },
@@ -253,6 +264,7 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
 
     return () => {
       if (connection) {
+        subscription.unsubscribe();
         connection.db.incident.removeOnInsert(refreshOnTableChange);
         connection.db.incident.removeOnUpdate(refreshOnTableChange);
         connection.db.incident.removeOnDelete(refreshOnTableChange);
@@ -271,10 +283,9 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
         connection.db.auditLog.removeOnInsert(refreshOnTableChange);
         connection.db.auditLog.removeOnUpdate(refreshOnTableChange);
         connection.db.auditLog.removeOnDelete(refreshOnTableChange);
-        connection.disconnect();
       }
     };
-  }, [fallbackIncident]);
+  }, [connection, fallbackIncident]);
 
   async function runAnalysis() {
     if (analysisRunning) return;
@@ -346,25 +357,49 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
     if (asset) setSelectedAsset(asset);
   }
 
-  function updateAssetScope(scopeStatus: AssetScopeStatus) {
+  async function updateAssetScope(scopeStatus: AssetScopeStatus) {
     if (!selectedAsset) return;
-    const updatedScopes = { ...assetScopesRef.current, [selectedAsset.id]: scopeStatus };
-    assetScopesRef.current = updatedScopes;
-    setAssetScopes(updatedScopes);
-    setSelectedAsset((current) => current ? { ...current, scopeStatus } : current);
-    setGraph((current) => ({
-      ...current,
-      nodes: current.nodes.map((node) => {
-        const asset = node.data.asset as FrontendAsset | undefined;
-        return asset?.id === selectedAsset.id
-          ? { ...node, data: { ...node.data, asset: { ...asset, scopeStatus } } }
-          : node;
-      }),
-    }));
+    if (!connection || selectedAsset.databaseId === undefined) {
+      setAnalysisError("This asset is not connected to a SpacetimeDB record, so its status cannot be updated.");
+      return;
+    }
+
+    setAssetActionPending(true);
+    setAnalysisError("");
+    try {
+      await connection.reducers.updateAssetCompromiseStatus({
+        assetId: selectedAsset.databaseId,
+        compromiseStatus: toReducerCompromiseStatus(scopeStatus),
+      });
+    } catch (error) {
+      setAnalysisError(error instanceof Error ? error.message : "Asset compromise status update failed.");
+    } finally {
+      setAssetActionPending(false);
+    }
   }
 
-  function executeContainmentDemo() {
-    updateAssetScope("Quarantined");
+  async function executeContainment() {
+    if (!selectedAsset) return;
+    if (!connection || selectedAsset.databaseId === undefined) {
+      setAnalysisError("This asset is not connected to a SpacetimeDB record, so containment cannot be applied.");
+      return;
+    }
+
+    setAssetActionPending(true);
+    setAnalysisError("");
+    const actionType = getContainmentActionType(selectedAsset.type);
+    const mitigationDetails = `${getContainmentAction(selectedAsset.type)} requested for ${selectedAsset.name}. FumbleBee records the action; no infrastructure adapter is configured.`;
+    try {
+      await connection.reducers.applyAssetContainment({
+        assetId: selectedAsset.databaseId,
+        actionType,
+        mitigationDetails,
+      });
+    } catch (error) {
+      setAnalysisError(error instanceof Error ? error.message : "Asset containment failed.");
+    } finally {
+      setAssetActionPending(false);
+    }
   }
 
   const panelActivities = useMemo(() => {
@@ -448,7 +483,7 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
             <form className="note-form" onSubmit={addNote}><span className="avatar avatar-blue note-avatar">AM</span><div className="note-input-wrap"><textarea value={noteText} onChange={(event) => setNoteText(event.target.value)} placeholder="Add an investigation note..." rows={2} /><div className="note-submit-row"><span>Visible to investigation team</span><button type="submit" className="button button-primary button-small" disabled={!noteText.trim()}>Add note</button></div></div></form>
           </section>
 
-          <AuditFeedPanel activities={panelActivities} auditEntries={liveAuditEntries} />
+          <AuditFeedPanel activities={panelActivities} auditEntries={liveAuditEntries} incidentId={incident.id} />
         </div>
       </div>
 
@@ -483,7 +518,7 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
                   <span>{selectedAssetScope}</span>
                 </div>
                 <label className="scope-select-label" htmlFor="asset-scope">Update asset scope</label>
-                <select id="asset-scope" className="scope-select" value={selectedAssetScope} onChange={(event) => updateAssetScope(event.target.value as AssetScopeStatus)}>
+                <select id="asset-scope" className="scope-select" value={selectedAssetScope} onChange={(event) => void updateAssetScope(event.target.value as AssetScopeStatus)} disabled={assetActionPending}>
                   <option>Exfiltrated</option>
                   <option>Ransomware Encrypted</option>
                   <option>Targeted</option>
@@ -493,10 +528,10 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
               <section className="asset-detail-section containment-section">
                 <span className="summary-label">OUT-OF-BAND CONTAINMENT</span>
                 <p>{getContainmentAction(selectedAsset.type)} action for this asset.</p>
-                <pre className="mitigation-terminal"><code>{`containment.request --asset "<selected asset>" --action "${getContainmentMode(selectedAsset.type)}" --mode dry-run`}</code></pre>
+                <pre className="mitigation-terminal"><code>{`containment.request --asset "${selectedAsset.name}" --action "${getContainmentActionType(selectedAsset.type)}" --mode record-only`}</code></pre>
                 <small className="containment-disclaimer">Demo simulation only. No infrastructure command is executed.</small>
-                <button className="containment-button" onClick={executeContainmentDemo} disabled={selectedAssetScope === "Quarantined"}>
-                  {selectedAssetScope === "Quarantined" ? <><ShieldCheck size={16} /> Asset Quarantined</> : "Execute Out-of-Band Containment"}
+                <button className="containment-button" onClick={() => void executeContainment()} disabled={assetActionPending || selectedAssetScope === "Quarantined"}>
+                  {assetActionPending ? <><LoaderCircle className="spin" size={15} /> Applying containment...</> : selectedAssetScope === "Quarantined" ? <><ShieldCheck size={16} /> Asset Quarantined</> : "Execute Out-of-Band Containment"}
                 </button>
               </section>
               <section className="asset-detail-section">
@@ -543,6 +578,28 @@ function getAssetTypeLabel(type: string): string {
   }
 }
 
+function toAssetScopeStatus(status: string): AssetScopeStatus {
+  switch (status.toLowerCase()) {
+    case "data_exfiltrated":
+    case "exfiltrated": return "Exfiltrated";
+    case "ransomware_encrypted": return "Ransomware Encrypted";
+    case "quarantined": return "Quarantined";
+    case "targeted":
+    case "compromised":
+    case "clean":
+    default: return "Targeted";
+  }
+}
+
+function toReducerCompromiseStatus(status: AssetScopeStatus): string {
+  switch (status) {
+    case "Exfiltrated": return "data_exfiltrated";
+    case "Ransomware Encrypted": return "ransomware_encrypted";
+    case "Targeted": return "targeted";
+    case "Quarantined": return "quarantined";
+  }
+}
+
 function getContainmentAction(type: FrontendAsset["type"]): string {
   switch (type) {
     case "identity": return "Credential revocation";
@@ -552,12 +609,12 @@ function getContainmentAction(type: FrontendAsset["type"]): string {
   }
 }
 
-function getContainmentMode(type: FrontendAsset["type"]): string {
+function getContainmentActionType(type: FrontendAsset["type"]): string {
   switch (type) {
-    case "identity": return "revoke-credentials";
-    case "share": return "lock-resource";
-    case "database": return "isolate-database";
-    case "resource": return "isolate-resource";
+    case "identity": return "revoke_iam";
+    case "share": return "lock_s3_bucket";
+    case "database": return "block_network";
+    case "resource": return "isolate_host";
   }
 }
 
