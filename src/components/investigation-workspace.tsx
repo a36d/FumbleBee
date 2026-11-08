@@ -1,19 +1,26 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Activity, AlertTriangle, ArrowLeft, ArrowUpRight, Check, CheckCircle2, Clock3, FileClock, Fingerprint, LoaderCircle, LockKeyhole, Plus, Shield, Sparkles } from "lucide-react";
 import Link from "next/link";
-import { formatAttackGraph, type AiAnalysisInput } from "@/sdk/src/index";
+import { createSentinelGraphClient, formatAttackGraph, type AiAnalysisInput } from "@/sdk/src/index";
+import {
+  DbConnection,
+  tables,
+} from "@/generated/spacetimedb";
+import type { Asset as LiveAsset, Incident as LiveIncident, InvestigationNote as LiveNote, Relationship as LiveRelationship } from "@/generated/spacetimedb/types";
 import { activity as initialActivity, assets, auditLogs, incidents, notes as initialNotes, relationships, relativeTime, seededIncidentAssets, seededIncidentRelationships } from "@/lib/mock-data";
 import { getAttackPathLayout } from "@/lib/graph-layout";
-import type { ActivityFeed, InvestigationNote } from "@/lib/types";
+import type { ActivityFeed, Asset as FrontendAsset, Incident as FrontendIncident, InvestigationNote, Relationship as FrontendRelationship } from "@/lib/types";
 import { AttackGraph } from "@/components/attack-graph";
 import { SeverityBadge, StatusBadge } from "@/components/severity-badge";
 
 const activityIcon = { incident: Shield, note: Plus, analysis: Sparkles, risk: AlertTriangle, graph: Activity };
 
 export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
-  const incident = useMemo(() => incidents.find((item) => item.id === incidentId) ?? incidents[0], [incidentId]);
+  const fallbackIncident = useMemo(() => incidents.find((item) => item.id === incidentId) ?? incidents[0], [incidentId]);
+  const [liveIncident, setLiveIncident] = useState<FrontendIncident | null>(null);
+  const incident = liveIncident ?? fallbackIncident;
   const [notes, setNotes] = useState(initialNotes.filter((note) => note.incidentId === incident.id));
   const [events, setEvents] = useState(initialActivity.filter((item) => item.incidentId === incident.id));
   const [noteText, setNoteText] = useState("");
@@ -28,6 +35,152 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
   });
   const [auditOpen, setAuditOpen] = useState(false);
   const [checked, setChecked] = useState<string[]>([]);
+  const [sentinelClient, setSentinelClient] = useState<ReturnType<typeof createSentinelGraphClient> | null>(null);
+
+  useEffect(() => {
+    let connection: DbConnection | null = null;
+    const refreshIncidentAndGraph = () => {
+      if (!connection) return;
+
+      const incidentRows = Array.from(connection.db.incident.iter()) as LiveIncident[];
+      const liveRow = incidentRows.find((row) => row.id === 1n);
+      if (liveRow) {
+        let recommendations: string[] = [];
+        try {
+          recommendations = JSON.parse(liveRow.recommendations || "[]");
+        } catch {
+          recommendations = [];
+        }
+
+        setLiveIncident({
+          id: liveRow.id.toString(),
+          subjectName: liveRow.subjectName,
+          title: liveRow.title,
+          description: liveRow.description,
+          triggerDetails: liveRow.triggerDetails || fallbackIncident.triggerDetails,
+          severity: liveRow.severity as FrontendIncident["severity"],
+          riskScore: liveRow.riskScore,
+          status: liveRow.status as FrontendIncident["status"],
+          createdAt: new Date(Number(liveRow.createdAt.microsSinceUnixEpoch / 1000n)).toISOString(),
+          threatClassification: liveRow.classification || "Pending Analysis",
+          blastRadius: liveRow.blastRadius ?? 0,
+          impactSummary: liveRow.impactSummary || fallbackIncident.impactSummary,
+          recommendations,
+          confidence: liveRow.confidence ?? 0,
+        });
+      }
+
+      const liveNotes = (Array.from(connection.db.investigationNote.iter()) as LiveNote[])
+        .filter((row) => row.incidentId === 1n)
+        .map((row) => ({
+          id: row.id.toString(),
+          incidentId: row.incidentId.toString(),
+          author: row.authorName,
+          initials: row.authorName
+            .split(/\s+/)
+            .map((part) => part[0])
+            .join("")
+            .slice(0, 2)
+            .toUpperCase(),
+          content: row.content,
+          createdAt: new Date(Number(row.createdAt.microsSinceUnixEpoch / 1000n)).toISOString(),
+        }));
+      if (liveNotes.length > 0) {
+        setNotes(liveNotes);
+      }
+
+      const liveAssets = (Array.from(connection.db.asset.iter()) as LiveAsset[])
+        .filter((row) => row.incidentId === 1n)
+        .map((row): FrontendAsset => ({
+          id: row.assetKey || row.id.toString(),
+          name: row.name,
+          type: row.assetType as FrontendAsset["type"],
+          description: row.description || "",
+          riskLabel: row.riskLevel,
+        }));
+
+      const liveRelationships = (Array.from(connection.db.relationship.iter()) as LiveRelationship[])
+        .filter((row) => row.incidentId === 1n)
+        .map((row): FrontendRelationship => ({
+          id: row.id.toString(),
+          sourceId: row.sourceAssetKey,
+          targetId: row.targetAssetKey,
+          label: row.relationLabel,
+        }));
+
+      if (liveAssets.length > 0 || liveRelationships.length > 0) {
+        const formattedGraph = formatAttackGraph(liveAssets, liveRelationships);
+        setGraph(getAttackPathLayout(formattedGraph.nodes, formattedGraph.edges));
+      }
+    };
+
+    connection = DbConnection.builder()
+      .withUri("http://localhost:3000")
+      .withDatabaseName("sentinelgraph")
+      .onConnect((connected) => {
+        connected.subscriptionBuilder().onApplied(refreshIncidentAndGraph).subscribe([
+          tables.incident,
+          tables.investigationNote,
+          tables.asset,
+          tables.relationship,
+        ]);
+      })
+      .build();
+
+    const refreshOnTableChange = () => refreshIncidentAndGraph();
+    connection.db.incident.onInsert(refreshOnTableChange);
+    connection.db.incident.onUpdate(refreshOnTableChange);
+    connection.db.incident.onDelete(refreshOnTableChange);
+    connection.db.investigationNote.onInsert(refreshOnTableChange);
+    connection.db.investigationNote.onUpdate(refreshOnTableChange);
+    connection.db.investigationNote.onDelete(refreshOnTableChange);
+    connection.db.asset.onInsert(refreshOnTableChange);
+    connection.db.asset.onUpdate(refreshOnTableChange);
+    connection.db.asset.onDelete(refreshOnTableChange);
+    connection.db.relationship.onInsert(refreshOnTableChange);
+    connection.db.relationship.onUpdate(refreshOnTableChange);
+    connection.db.relationship.onDelete(refreshOnTableChange);
+
+    const client = createSentinelGraphClient({
+      host: "http://localhost:3000",
+      databaseName: "sentinelgraph",
+      transport: {
+        reducer: {
+          call: (_name, args) => {
+            if (!connection) return;
+            if (_name === "applyAiAnalysis") {
+              const reducers = connection.reducers as unknown as {
+                applyAiAnalysis: (args: Record<string, unknown>) => void;
+              };
+              reducers.applyAiAnalysis(args);
+              return;
+            }
+            const reducers = connection.reducers as unknown as Record<string, (args: Record<string, unknown>) => void>;
+            reducers[_name]?.(args);
+          },
+        },
+      },
+    });
+    setSentinelClient(client);
+
+    return () => {
+      if (connection) {
+        connection.db.incident.removeOnInsert(refreshOnTableChange);
+        connection.db.incident.removeOnUpdate(refreshOnTableChange);
+        connection.db.incident.removeOnDelete(refreshOnTableChange);
+        connection.db.investigationNote.removeOnInsert(refreshOnTableChange);
+        connection.db.investigationNote.removeOnUpdate(refreshOnTableChange);
+        connection.db.investigationNote.removeOnDelete(refreshOnTableChange);
+        connection.db.asset.removeOnInsert(refreshOnTableChange);
+        connection.db.asset.removeOnUpdate(refreshOnTableChange);
+        connection.db.asset.removeOnDelete(refreshOnTableChange);
+        connection.db.relationship.removeOnInsert(refreshOnTableChange);
+        connection.db.relationship.removeOnUpdate(refreshOnTableChange);
+        connection.db.relationship.removeOnDelete(refreshOnTableChange);
+        connection.disconnect();
+      }
+    };
+  }, [fallbackIncident]);
 
   async function runAnalysis() {
     if (analysisRunning) return;
@@ -53,6 +206,12 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
       }
 
       const { analysis } = result;
+      if (!sentinelClient) {
+        throw new Error("SpacetimeDB client is not connected.");
+      }
+      await sentinelClient.applyAiAnalysis(1n, {
+        ...analysis,
+      });
       const formattedGraph = formatAttackGraph(analysis.assets, analysis.edges);
       setGraph(getAttackPathLayout(formattedGraph.nodes, formattedGraph.edges));
       setAnalysisResult(analysis);
