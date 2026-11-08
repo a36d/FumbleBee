@@ -90,12 +90,11 @@ export function IncidentHub() {
   async function declareIncident(formData: FormData) {
     if (!connection || creating) return;
     const title = String(formData.get("title") ?? "").trim();
-    const subjectName = String(formData.get("subjectName") ?? "").trim();
     const description = String(formData.get("description") ?? "").trim();
     const severity = String(formData.get("severity") ?? "Medium") as Severity;
     const triageNotes = String(formData.get("triageNotes") ?? "").trim();
-    if (!title || !subjectName || !description) {
-      setError("Enter an incident title, subject/account, and description.");
+    if (!title || !description) {
+      setError("Enter an incident title and description.");
       return;
     }
 
@@ -219,7 +218,6 @@ export function IncidentHub() {
             </div>
             <form action={declareIncident} className="modal-form">
               <label>Incident Title<input name="title" placeholder="e.g. Unusual bulk data access" required /></label>
-              <label>Subject / Account<input name="subjectName" placeholder="Person, service, or account" required /></label>
               <label>Description<textarea name="description" rows={3} placeholder="Summarize the observed incident and context." required /></label>
               <label>Severity<select name="severity" defaultValue="Medium"><option>Low</option><option>Medium</option><option>High</option><option>Critical</option></select></label>
               <label>Initial Forensic Triage Notes<textarea name="triageNotes" rows={3} placeholder="Evidence handling, initial findings, or collection instructions." /></label>
