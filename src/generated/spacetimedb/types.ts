@@ -61,6 +61,7 @@ export const Incident = __t.object("Incident", {
   businessImpactSummary: __t.string(),
   recommendations: __t.string(),
   createdBy: __t.identity(),
+  owner: __t.string(),
   createdAt: __t.timestamp(),
 });
 export type Incident = __Infer<typeof Incident>;

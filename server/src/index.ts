@@ -37,6 +37,7 @@ const incident = table(
     businessImpactSummary: t.string().default(''),
     recommendations: t.string(),
     createdBy: t.identity(),
+    owner: t.string().default(''),
     createdAt: t.timestamp(),
   },
 );
@@ -112,7 +113,7 @@ const spacetime = schema({
   auditLog,
 });
 
-type Role = 'admin' | 'investigator' | 'commander' | 'legal' | 'viewer';
+type Role = 'Admin' | 'Employee';
 
 function defaultEmail(value: string): string {
   const localPart = value
@@ -146,11 +147,20 @@ function requireRole(ctx: any, allowed: Role[]) {
       email: 'analyst@fumblebee.local',
       username: `soc-${ctx.sender.toHexString().slice(0, 12)}`,
       passwordHash: '',
-      role: 'investigator',
+      role: 'Employee',
       createdAt: ctx.timestamp,
     });
   }
-  if (!allowed.includes(row.role as Role)) {
+  const normalizedRole: Role =
+    row.role === 'Admin' || row.role === 'admin'
+      ? 'Admin'
+      : 'Employee';
+  if (normalizedRole !== row.role) {
+    ctx.db.user.identity.delete(ctx.sender);
+    ctx.db.user.insert({ ...row, role: normalizedRole });
+    row = ctx.db.user.identity.find(ctx.sender);
+  }
+  if (!allowed.includes(normalizedRole)) {
     throw new SenderError('Permission denied');
   }
   return row;
@@ -254,7 +264,7 @@ export const init = spacetime.init((ctx: any) => {
       email: 'admin@fumblebee.local',
       username: 'administrator',
       passwordHash: '',
-      role: 'admin',
+      role: 'Admin',
       createdAt: ctx.timestamp,
     });
   }
@@ -263,8 +273,8 @@ export const init = spacetime.init((ctx: any) => {
 export const createUser = spacetime.reducer(
   { identity: t.identity(), name: t.string(), email: t.string(), role: t.string() },
   (ctx: any, args: any) => {
-    requireRole(ctx as any, ['admin']);
-    if (!['admin', 'investigator', 'commander', 'legal', 'viewer'].includes(args.role)) throw new SenderError('Invalid role');
+    requireRole(ctx as any, ['Admin']);
+    if (!['Admin', 'Employee'].includes(args.role)) throw new SenderError('Invalid role');
     const username = args.name.trim().toLowerCase().replace(/\s+/g, '-');
     if (!username) throw new SenderError('Invalid username');
     for (const userRow of ctx.db.user.iter()) {
@@ -286,8 +296,9 @@ export const createUser = spacetime.reducer(
 export const signUp = spacetime.reducer(
   { username: t.string(), passwordHash: t.string(), role: t.string() },
   (ctx: any, args: any) => {
-    const allowedRoles = ['admin', 'investigator', 'commander', 'legal'];
-    if (!allowedRoles.includes(args.role)) throw new SenderError('Invalid role');
+    // Public registration always starts as Employee; only an Admin reducer
+    // may promote an existing account.
+    const role = 'Employee';
     const username = args.username.trim();
     if (!username) throw new SenderError('Username is required');
     if (!args.passwordHash) throw new SenderError('Password hash is required');
@@ -301,10 +312,30 @@ export const signUp = spacetime.reducer(
       email: defaultEmail(username),
       username,
       passwordHash: args.passwordHash,
-      role: args.role,
+      role,
       createdAt: ctx.timestamp,
     });
-    appendAudit(ctx, `USER_REGISTERED: [${username}] as [${args.role}]`, null);
+    appendAudit(ctx, `USER_REGISTERED: [${username}] as [${role}]`, null);
+  },
+);
+
+export const inviteMember = spacetime.reducer(
+  { username: t.string() },
+  (ctx: any, args: any) => {
+    requireRole(ctx as any, ['Admin']);
+    const username = args.username.trim();
+    if (!username) throw new SenderError('Username is required');
+    let target: any = null;
+    for (const userRow of ctx.db.user.iter()) {
+      if (userRow.username === username) {
+        target = userRow;
+        break;
+      }
+    }
+    if (!target) throw new SenderError('Account not found');
+    ctx.db.user.identity.delete(target.identity);
+    ctx.db.user.insert({ ...target, role: 'Employee' });
+    appendAudit(ctx, `COMPANY_MEMBER_INVITED: [${username}] as [Employee]`, null);
   },
 );
 
@@ -382,8 +413,8 @@ export const changeUserPassword = spacetime.reducer(
 export const assignUserRole = spacetime.reducer(
   { targetIdentity: t.identity(), newRole: t.string() },
   (ctx: any, args: any) => {
-    requireRole(ctx as any, ['admin']);
-    if (!['admin', 'investigator', 'commander', 'legal'].includes(args.newRole)) {
+    requireRole(ctx as any, ['Admin']);
+    if (!['Admin', 'Employee'].includes(args.newRole)) {
       throw new SenderError('Invalid role');
     }
     const existing = ctx.db.user.identity.find(args.targetIdentity);
@@ -401,8 +432,8 @@ export const assignUserRole = spacetime.reducer(
 export const setUserRole = spacetime.reducer(
   { identity: t.identity(), role: t.string() },
   (ctx: any, args: any) => {
-    requireRole(ctx as any, ['admin']);
-    if (!['admin', 'investigator', 'commander', 'legal', 'viewer'].includes(args.role)) throw new SenderError('Invalid role');
+    requireRole(ctx as any, ['Admin']);
+    if (!['Admin', 'Employee'].includes(args.role)) throw new SenderError('Invalid role');
     const existing = ctx.db.user.identity.find(args.identity);
     if (!existing) throw new SenderError('User not found');
     ctx.db.user.identity.delete(args.identity);
@@ -414,7 +445,7 @@ export const setUserRole = spacetime.reducer(
 export const deleteUser = spacetime.reducer(
   { identity: t.identity() },
   (ctx: any, args: any) => {
-    requireRole(ctx as any, ['admin']);
+    requireRole(ctx as any, ['Admin']);
     const existing = ctx.db.user.identity.find(args.identity);
     if (!existing) throw new SenderError('User not found');
     ctx.db.user.identity.delete(args.identity);
@@ -425,7 +456,7 @@ export const deleteUser = spacetime.reducer(
 export const createIncident = spacetime.reducer(
   { title: t.string(), description: t.string(), severity: t.string(), initialNotes: t.string() },
   (ctx: any, args: any) => {
-    const actor = requireRole(ctx as any, ['admin', 'investigator', 'commander']);
+    const actor = requireRole(ctx as any, ['Admin', 'Employee']);
     const title = args.title.trim();
     const description = args.description.trim();
     const validSeverities = ['Low', 'Medium', 'High', 'Critical'];
@@ -450,6 +481,7 @@ export const createIncident = spacetime.reducer(
       businessImpactSummary: '',
       recommendations: '[]',
       createdBy: ctx.sender,
+      owner: actor.username,
       createdAt: ctx.timestamp,
     });
     const initialNotes = args.initialNotes.trim();
@@ -469,10 +501,30 @@ export const createIncident = spacetime.reducer(
   },
 );
 
+export const assignIncident = spacetime.reducer(
+  { incidentId: t.u64(), owner: t.string() },
+  (ctx: any, args: any) => {
+    requireRole(ctx as any, ['Admin', 'Employee']);
+    const owner = args.owner.trim();
+    if (!owner) throw new SenderError('Owner username is required');
+    let ownerExists = false;
+    for (const userRow of ctx.db.user.iter()) {
+      if (userRow.username === owner) ownerExists = true;
+    }
+    if (!ownerExists) throw new SenderError('Owner account not found');
+    const incident = ctx.db.incident.id.find(args.incidentId);
+    if (!incident) throw new SenderError('Incident not found');
+    ctx.db.incident.id.delete(args.incidentId);
+    ctx.db.incident.insert({ ...incident, owner });
+    addActivity(ctx, args.incidentId, owner, 'Incident Assigned');
+    appendAudit(ctx, `INCIDENT_ASSIGNED: [${args.incidentId}] -> [${owner}]`, args.incidentId);
+  },
+);
+
 export const updateIncident = spacetime.reducer(
   { id: t.u64(), title: t.string(), description: t.string(), subjectName: t.string(), status: t.string(), severity: t.string(), riskScore: t.u8(), classification: t.string(), summary: t.string() },
   (ctx: any, args: any) => {
-    const actor = requireRole(ctx as any, ['admin', 'investigator']);
+    const actor = requireRole(ctx as any, ['Admin', 'Employee']);
     const existing = ctx.db.incident.id.find(args.id);
     if (!existing) throw new SenderError('Incident not found');
     ctx.db.incident.id.delete(args.id);
@@ -495,7 +547,7 @@ export const updateIncident = spacetime.reducer(
 export const addInvestigationNote = spacetime.reducer(
   { incidentId: t.u64(), content: t.string() },
   (ctx: any, args: any) => {
-    const actor = requireRole(ctx as any, ['admin', 'investigator']);
+    const actor = requireRole(ctx as any, ['Admin', 'Employee']);
     if (!ctx.db.incident.id.find(args.incidentId)) throw new SenderError('Incident not found');
     ctx.db.investigationNote.insert({
       id: 0n,
@@ -513,7 +565,7 @@ export const addInvestigationNote = spacetime.reducer(
 export const updateAssetCompromiseStatus = spacetime.reducer(
   { assetId: t.u64(), compromiseStatus: t.string() },
   (ctx: any, args: any) => {
-    const actor = requireRole(ctx as any, ['admin', 'investigator', 'commander']);
+    const actor = requireRole(ctx as any, ['Admin', 'Employee']);
     const allowedStatuses = [
       'clean',
       'targeted',
@@ -546,7 +598,7 @@ export const updateAssetCompromiseStatus = spacetime.reducer(
 export const applyAssetContainment = spacetime.reducer(
   { assetId: t.u64(), actionType: t.string(), mitigationDetails: t.string() },
   (ctx: any, args: any) => {
-    const actor = requireRole(ctx as any, ['admin', 'investigator', 'commander']);
+    const actor = requireRole(ctx as any, ['Admin', 'Employee']);
     const allowedActions = [
       'isolate_host',
       'revoke_iam',
@@ -606,7 +658,7 @@ export const applyAiAnalysis = spacetime.reducer(
     relationships: t.string(),
   },
   (ctx: any, args: any) => {
-    const actor = requireRole(ctx as any, ['admin', 'investigator']);
+    const actor = requireRole(ctx as any, ['Admin', 'Employee']);
     const existing = ctx.db.incident.id.find(args.incidentId);
     if (!existing) throw new SenderError('Incident not found');
 

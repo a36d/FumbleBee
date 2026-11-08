@@ -7,7 +7,7 @@ import {
 
 export interface ResponderSessionProfile {
   username: string;
-  role: string;
+  role: "Admin" | "Employee";
   token?: string;
 }
 
@@ -50,7 +50,8 @@ function readSavedProfile(): ResponderSessionProfile | null {
       "role" in parsed &&
       typeof parsed.role === "string"
     ) {
-      return { username: parsed.username, role: parsed.role };
+      const role = parsed.role === "Admin" || parsed.role === "admin" ? "Admin" : "Employee";
+      return { username: parsed.username, role };
     }
     return null;
   } catch {

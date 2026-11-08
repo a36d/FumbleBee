@@ -10,6 +10,7 @@ import type {
 export const incidents: Incident[] = [
   {
     id: "1",
+    owner: "administrator",
     subjectName: "svc-prod-data-pipeline",
     title: "Unusual Bulk Data Access & Privilege Escalation",
     description: "Production service account accessed sensitive S3 storage buckets and modified IAM trust policies outside standard business hours.",
@@ -30,6 +31,7 @@ export const incidents: Incident[] = [
   },
   {
     id: "INC-2024-0847",
+    owner: "morgan.chen",
     subjectName: "Morgan Chen",
     title: "Unusual data access before departure",
     description: "A burst of sensitive repository and customer-data access preceded an unusual outbound transfer.",
@@ -46,6 +48,7 @@ export const incidents: Incident[] = [
   },
   {
     id: "INC-2024-0846",
+    owner: "taylor.brooks",
     subjectName: "Taylor Brooks",
     title: "Privileged credential misuse",
     description: "An elevated service credential was used outside its normal access pattern.",
@@ -62,6 +65,7 @@ export const incidents: Incident[] = [
   },
   {
     id: "INC-2024-0845",
+    owner: "jordan.lee",
     subjectName: "Jordan Lee",
     title: "Mass file download detected",
     description: "A user downloaded a large volume of files from a restricted team share.",
@@ -78,6 +82,7 @@ export const incidents: Incident[] = [
   },
   {
     id: "INC-2024-0844",
+    owner: "alex.rivera",
     subjectName: "Alex Rivera",
     title: "Off-hours access anomaly",
     description: "Multiple systems were accessed outside the employee's regular working hours.",
@@ -94,6 +99,7 @@ export const incidents: Incident[] = [
   },
   {
     id: "INC-2024-0843",
+    owner: "sam.patel",
     subjectName: "Sam Patel",
     title: "Unapproved USB device connected",
     description: "An external storage device was connected to a managed workstation.",

@@ -5,6 +5,7 @@ export type AssetScopeStatus = "Exfiltrated" | "Ransomware Encrypted" | "Targete
 
 export interface Incident {
   id: string;
+  owner?: string;
   subjectName: string;
   title: string;
   description: string;

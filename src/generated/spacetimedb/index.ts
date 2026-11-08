@@ -42,6 +42,7 @@ import ChangeUserPasswordReducer from "./change_user_password_reducer";
 import CreateIncidentReducer from "./create_incident_reducer";
 import CreateUserReducer from "./create_user_reducer";
 import DeleteUserReducer from "./delete_user_reducer";
+import InviteMemberReducer from "./invite_member_reducer";
 import SetUserRoleReducer from "./set_user_role_reducer";
 import SignInReducer from "./sign_in_reducer";
 import SignUpReducer from "./sign_up_reducer";
@@ -168,6 +169,7 @@ const reducersSchema = __reducers(
   __reducerSchema("create_incident", CreateIncidentReducer),
   __reducerSchema("create_user", CreateUserReducer),
   __reducerSchema("delete_user", DeleteUserReducer),
+  __reducerSchema("invite_member", InviteMemberReducer),
   __reducerSchema("set_user_role", SetUserRoleReducer),
   __reducerSchema("sign_in", SignInReducer),
   __reducerSchema("sign_up", SignUpReducer),

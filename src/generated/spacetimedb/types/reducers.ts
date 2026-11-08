@@ -14,6 +14,7 @@ import ChangeUserPasswordReducer from "../change_user_password_reducer";
 import CreateIncidentReducer from "../create_incident_reducer";
 import CreateUserReducer from "../create_user_reducer";
 import DeleteUserReducer from "../delete_user_reducer";
+import InviteMemberReducer from "../invite_member_reducer";
 import SetUserRoleReducer from "../set_user_role_reducer";
 import SignInReducer from "../sign_in_reducer";
 import SignUpReducer from "../sign_up_reducer";
@@ -29,6 +30,7 @@ export type ChangeUserPasswordParams = __Infer<typeof ChangeUserPasswordReducer>
 export type CreateIncidentParams = __Infer<typeof CreateIncidentReducer>;
 export type CreateUserParams = __Infer<typeof CreateUserReducer>;
 export type DeleteUserParams = __Infer<typeof DeleteUserReducer>;
+export type InviteMemberParams = __Infer<typeof InviteMemberReducer>;
 export type SetUserRoleParams = __Infer<typeof SetUserRoleReducer>;
 export type SignInParams = __Infer<typeof SignInReducer>;
 export type SignUpParams = __Infer<typeof SignUpReducer>;

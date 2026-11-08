@@ -8,15 +8,9 @@ import type { User } from "@/generated/spacetimedb/types";
 import { useSpacetimeConnection } from "@/components/spacetime-connection-provider";
 import { hashPassword } from "@/lib/auth";
 
-const responderRoles = [
-  "SOC Investigator",
-  "Incident Commander",
-  "Forensics Lead",
-  "Legal Counsel",
-] as const;
-
-type ResponderRole = (typeof responderRoles)[number] | "Administrator";
-type AssignableRole = ResponderRole | "Administrator";
+const responderRoles = ["Employee", "Admin"] as const;
+type ResponderRole = (typeof responderRoles)[number];
+type AssignableRole = ResponderRole;
 type AuthMode = "signin" | "register" | "roles";
 
 interface ResponderSession {
@@ -44,56 +38,48 @@ function withTimeout<T>(operation: Promise<T>, timeoutMs = 5000): Promise<T> {
 }
 
 const roleDescriptions: Record<ResponderRole, string> = {
-  "SOC Investigator": "Investigate alerts and document incident evidence.",
-  "Incident Commander": "Coordinate response decisions and containment.",
-  "Forensics Lead": "Preserve evidence and coordinate forensic review.",
-  "Legal Counsel": "Review incident scope and support legal response.",
-  Administrator: "Manage responder accounts, roles, and incident response.",
+  Employee: "Investigate incidents and contribute incident evidence.",
+  Admin: "Manage company members, roles, and incident response.",
 };
 
 function isResponderRole(value: unknown): value is ResponderRole {
-  return value === "Administrator" || (typeof value === "string" && responderRoles.includes(value as (typeof responderRoles)[number]));
+  return value === "Admin" || value === "Employee";
 }
 
 function reducerRole(role: AssignableRole): string {
   switch (role) {
-    case "SOC Investigator":
-    case "Forensics Lead": return "investigator";
-    case "Incident Commander": return "commander";
-    case "Legal Counsel": return "legal";
-    case "Administrator": return "admin";
+    case "Admin": return "Admin";
+    case "Employee": return "Employee";
   }
 }
 
 function displayRole(role: string): string {
   switch (role) {
-    case "admin": return "Administrator";
-    case "investigator": return "SOC Investigator";
-    case "commander": return "Incident Commander";
-    case "legal": return "Legal Counsel";
-    default: return role;
+    case "Admin":
+    case "admin": return "Admin";
+    case "Employee":
+    case "employee":
+    case "investigator":
+    case "commander":
+    case "legal":
+    case "viewer": return "Employee";
+    default: return "Employee";
   }
 }
 
 function responderRoleFromDatabase(role: string): ResponderRole {
   switch (role) {
-    case "admin": return "Administrator";
-    case "commander": return "Incident Commander";
-    case "legal": return "Legal Counsel";
-    case "investigator": return "SOC Investigator";
-    default: throw new Error(`The signed-in responder has an unrecognized role: ${role}`);
+    case "Admin":
+    case "admin": return "Admin";
+    default: return "Employee";
   }
 }
 
 function compactRole(role: string): string {
   switch (role) {
-    case "SOC Investigator": return "Investigator";
-    case "Incident Commander": return "Commander";
-    case "Forensics Lead": return "Forensics Lead";
-    case "Legal Counsel": return "Legal Counsel";
-    case "Administrator":
-    case "admin": return "Administrator";
-    default: return role;
+    case "Admin":
+    case "admin": return "Admin";
+    default: return "Employee";
   }
 }
 
@@ -118,12 +104,13 @@ export function AuthModal({ externalOpenToken = 0 }: { externalOpenToken?: numbe
   const [open, setOpen] = useState(false);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [role, setRole] = useState<ResponderRole>("SOC Investigator");
+  const [role, setRole] = useState<ResponderRole>("Employee");
   const [users, setUsers] = useState<ResponderAccount[]>([]);
   const [savedSessions, setSavedSessions] = useState<SavedResponderSession[]>([]);
   const [sessionToSwitch, setSessionToSwitch] = useState("");
   const [targetIdentity, setTargetIdentity] = useState("");
-  const [newRole, setNewRole] = useState<AssignableRole>("SOC Investigator");
+  const [newRole, setNewRole] = useState<AssignableRole>("Employee");
+  const [inviteUsername, setInviteUsername] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -324,6 +311,34 @@ export function AuthModal({ externalOpenToken = 0 }: { externalOpenToken?: numbe
     }
   }
 
+  async function inviteMember(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!connection) {
+      setError(connectionError || "SpacetimeDB is not connected.");
+      return;
+    }
+    if (session?.role !== "Admin") {
+      setError("Only authenticated Admin users can invite company members.");
+      return;
+    }
+    const username = inviteUsername.trim();
+    if (!username) {
+      setError("Enter the username of an existing account.");
+      return;
+    }
+    setSubmitting(true);
+    setError("");
+    try {
+      await withTimeout(connection.reducers.inviteMember({ username }));
+      setInviteUsername("");
+      setNotice(`${username} was added to the company workspace as Employee.`);
+    } catch (inviteError) {
+      setError(inviteError instanceof Error ? inviteError.message : "Company invite failed.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   return (
     <>
       <div className="responder-controls">
@@ -385,6 +400,22 @@ export function AuthModal({ externalOpenToken = 0 }: { externalOpenToken?: numbe
                   </div>
                   <small>Only sessions previously registered on this device can be switched to.</small>
                 </div>
+                {session?.role === "Admin" ? (
+                  <>
+                <form className="auth-role-form auth-invite-form" onSubmit={inviteMember}>
+                  <label>
+                    Invite existing account
+                    <input
+                      value={inviteUsername}
+                      onChange={(event) => setInviteUsername(event.target.value)}
+                      placeholder="Username"
+                      autoComplete="off"
+                    />
+                  </label>
+                  <button className="button button-primary" type="submit" disabled={submitting || !connection}>
+                    {submitting ? "Inviting..." : "Invite to Acme Corporation"}
+                  </button>
+                </form>
                 <form className="auth-role-form" onSubmit={assignRole}>
                   <label>
                     Responder account
@@ -400,11 +431,8 @@ export function AuthModal({ externalOpenToken = 0 }: { externalOpenToken?: numbe
                   <label>
                     Assign role
                     <select value={newRole} onChange={(event) => setNewRole(event.target.value as AssignableRole)}>
-                      <option>SOC Investigator</option>
-                      <option>Incident Commander</option>
-                      <option>Forensics Lead</option>
-                      <option>Legal Counsel</option>
-                      <option>Administrator</option>
+                      <option>Employee</option>
+                      <option>Admin</option>
                     </select>
                   </label>
                   <button className="button button-primary" type="submit" disabled={submitting || !connection}>
@@ -412,6 +440,10 @@ export function AuthModal({ externalOpenToken = 0 }: { externalOpenToken?: numbe
                   </button>
                 </form>
                 <p className="auth-demo-notice">Role changes are authorized by the SpacetimeDB admin-only reducer.</p>
+                  </>
+                ) : (
+                  <p className="auth-demo-notice">Only Admin users can invite members or assign roles.</p>
+                )}
                 <div className="auth-active-roster">
                   <span className="summary-label">ACME CORPORATION - ACTIVE RESPONDERS</span>
                   {users.length > 0 ? (
@@ -450,9 +482,7 @@ export function AuthModal({ externalOpenToken = 0 }: { externalOpenToken?: numbe
                 {mode === "register" && (
                   <label>
                     Responder role
-                    <select value={role} onChange={(event) => setRole(event.target.value as ResponderRole)}>
-                      {responderRoles.map((responderRole) => <option key={responderRole}>{responderRole}</option>)}
-                    </select>
+                    <input value="Employee" readOnly />
                   </label>
                 )}
                 <p className="auth-demo-notice">{mode === "register" ? "Registration hashes the password with SHA-256 before sending it to the SpacetimeDB sign-up reducer." : "Your password is hashed with SHA-256 and verified by SpacetimeDB."}</p>
