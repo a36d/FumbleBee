@@ -126,6 +126,7 @@ export function AuthModal({ externalOpenToken = 0 }: { externalOpenToken?: numbe
   const [newRole, setNewRole] = useState<AssignableRole>("SOC Investigator");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
 
   useEffect(() => {
     if (externalOpenToken > 0) {
@@ -134,6 +135,12 @@ export function AuthModal({ externalOpenToken = 0 }: { externalOpenToken?: numbe
       setOpen(true);
     }
   }, [externalOpenToken]);
+
+  useEffect(() => {
+    if (!notice) return;
+    const timeoutId = window.setTimeout(() => setNotice(""), 5000);
+    return () => window.clearTimeout(timeoutId);
+  }, [notice]);
 
   useEffect(() => {
     try {
@@ -217,6 +224,7 @@ export function AuthModal({ externalOpenToken = 0 }: { externalOpenToken?: numbe
 
     setSubmitting(true);
     setError("");
+    setNotice("");
     try {
       const passwordHash = await hashPassword(password);
       let nextRole: ResponderRole;
@@ -231,16 +239,24 @@ export function AuthModal({ externalOpenToken = 0 }: { externalOpenToken?: numbe
           .find((user) => user.username === cleanUsername);
         nextRole = responderRoleFromDatabase(authenticatedUser?.role ?? existingUser?.role ?? "");
       } else {
-        await withTimeout(connection.reducers.signUp({
+        const registrationDispatch = connection.reducers.signUp({
           username: cleanUsername,
           passwordHash,
           role: reducerRole(role),
-        }));
+        });
+        void Promise.resolve(registrationDispatch).catch((registrationError) => {
+          setError(registrationError instanceof Error ? registrationError.message : "Responder registration failed.");
+        });
         nextRole = role;
       }
 
       const nextSession = { username: cleanUsername, role: nextRole };
-      saveSession(nextSession);
+      try {
+        saveSession(nextSession);
+      } catch {
+        localStorage.setItem("fumblebee_session", JSON.stringify(nextSession));
+      }
+      localStorage.setItem("fumblebee_active_responder", JSON.stringify(nextSession));
       setSession(nextSession);
       const savedSessionsValue: unknown = JSON.parse(localStorage.getItem("fumblebee_responder_sessions") ?? "[]");
       setSavedSessions(Array.isArray(savedSessionsValue) ? savedSessionsValue.filter(isSavedResponderSession) : []);
@@ -248,6 +264,7 @@ export function AuthModal({ externalOpenToken = 0 }: { externalOpenToken?: numbe
       setUsername("");
       setPassword("");
       setError("");
+      if (mode === "register") setNotice(`Responder ${cleanUsername} registered successfully.`);
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : mode === "signin" ? "Sign in failed." : "Responder registration failed.");
     } finally {
@@ -322,6 +339,7 @@ export function AuthModal({ externalOpenToken = 0 }: { externalOpenToken?: numbe
           Admin: Manage Roles / Add User
         </button>
       </div>
+      {notice && <p className="auth-success-notice" role="status">{notice}</p>}
 
       {open && createPortal(
         <div className="modal-backdrop auth-modal-backdrop" onClick={() => setOpen(false)}>

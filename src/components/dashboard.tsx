@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ArrowRight, X } from "lucide-react";
-import { incidents } from "@/lib/mock-data";
 import type { Incident, IncidentStatus, Severity } from "@/lib/types";
 import { MetricCard } from "@/components/metric-card";
 import { SeverityBadge, StatusBadge } from "@/components/severity-badge";
@@ -42,7 +41,6 @@ export function Dashboard() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [severityFilter, setSeverityFilter] = useState<"All severity" | Severity>("All severity");
-  const [localIncidents, setLocalIncidents] = useState(incidents);
   const [liveIncidents, setLiveIncidents] = useState<LiveIncident[]>([]);
   const [liveAssets, setLiveAssets] = useState<LiveAsset[]>([]);
   const [liveUsers, setLiveUsers] = useState<LiveUser[]>([]);
@@ -103,8 +101,7 @@ export function Dashboard() {
     };
   }, [connection]);
 
-  const displayIncidents: Incident[] = liveIncidents.length
-    ? liveIncidents.map((incident) => ({
+  const displayIncidents: Incident[] = liveIncidents.map((incident) => ({
         id: incident.id.toString(),
         title: incident.title,
         subjectName: incident.subjectName,
@@ -130,8 +127,7 @@ export function Dashboard() {
           }
         })(),
         confidence: Number(incident.confidence),
-      }))
-    : localIncidents;
+      }));
 
   const subjectSuggestions = Array.from(new Set([
     ...liveUsers.map((user) => user.name.trim()).filter(Boolean),
@@ -170,7 +166,7 @@ export function Dashboard() {
   const chartHeights = chartCounts.map((count) => Math.round((count / chartMax) * 100));
   const visibleOpenIncidents = displayIncidents.filter((incident) => {
     const status = incident.status.toLowerCase();
-    return status !== "resolved" && status !== "contained" && status !== "closed";
+    return status !== "resolved";
   });
   const activeInvestigationCount = visibleOpenIncidents.length;
   const highRiskSubjects = new Set(
@@ -180,15 +176,16 @@ export function Dashboard() {
       .filter(Boolean),
   );
   const highRiskUserCount = highRiskSubjects.size;
-  const atRiskAssetCount = new Set(
-    visibleOpenIncidents
-      .map((incident) => incident.subjectName.trim().toLowerCase())
-      .filter(Boolean),
-  ).size || liveAssets.filter((asset) => {
-    const status = asset.compromiseStatus.toLowerCase();
+  const impactedEntities = new Set(
+    visibleOpenIncidents.map((incident) => incident.subjectName.trim().toLowerCase()).filter(Boolean),
+  );
+  const liveAtRiskAssets = liveAssets.filter((asset) => {
+    const status = asset.compromiseStatus.trim().toLowerCase();
     return status === "at-risk" || status === "at_risk" || status === "high" || status === "critical";
-  }).length || liveAssets.length;
-  const recentAlertCount = liveAuditLogs.length || visibleOpenIncidents.length;
+  });
+  liveAtRiskAssets.forEach((asset) => impactedEntities.add(asset.name.trim().toLowerCase()));
+  const atRiskAssetCount = impactedEntities.size;
+  const recentAlertCount = liveAuditLogs.length;
 
   const normalizedQuery = query.trim().toLowerCase();
   const filtered = displayIncidents.filter((incident) => {
