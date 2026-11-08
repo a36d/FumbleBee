@@ -13,6 +13,9 @@ export const NemotronAnalysisSchema = z.object({
   blastRadius: z.number().int().min(0),
   confidence: z.number().int().min(0).max(100),
   impactSummary: z.string(),
+  projectedDowntime: z.string(),
+  complianceRisk: z.string(),
+  businessImpactSummary: z.string(),
   recommendations: z.array(z.string()),
   assets: z.array(z.object({
     id: z.string().min(1),
@@ -97,6 +100,11 @@ export function mockNemotron(input: NemotronInput): NemotronAnalysis {
     blastRadius: isExfiltration ? 6 : 3,
     confidence: isExfiltration ? 92 : 78,
     impactSummary: `Mock analysis indicates ${isExfiltration ? 'possible data exfiltration activity' : 'suspicious insider activity'} involving ${subject}.`,
+    projectedDowntime: severity === 'Critical' ? '4-8 hours' : severity === 'High' ? '1-4 hours' : 'Under 1 hour',
+    complianceRisk: isExfiltration ? 'SOC 2, GDPR, and breach-notification exposure' : 'SOC 2 and internal-access-control exposure',
+    businessImpactSummary: isExfiltration
+      ? 'Sensitive business and customer data may be unavailable or require regulatory notification.'
+      : 'Operational disruption is possible while identity and access controls are validated.',
     recommendations: [
       'Preserve relevant endpoint and identity-center logs.',
       'Revoke active sessions and validate current access controls.',
@@ -165,6 +173,9 @@ export async function analyzeWithNemotron(
       blastRadius: { type: 'integer', minimum: 0 },
       confidence: { type: 'integer', minimum: 0, maximum: 100 },
       impactSummary: { type: 'string' },
+      projectedDowntime: { type: 'string' },
+      complianceRisk: { type: 'string' },
+      businessImpactSummary: { type: 'string' },
       recommendations: { type: 'array', items: { type: 'string' } },
       assets: {
         type: 'array',
@@ -197,7 +208,8 @@ export async function analyzeWithNemotron(
     },
     required: [
       'threatClassification', 'riskScore', 'severity', 'blastRadius', 'confidence',
-      'impactSummary', 'recommendations', 'assets', 'edges',
+      'impactSummary', 'projectedDowntime', 'complianceRisk', 'businessImpactSummary',
+      'recommendations', 'assets', 'edges',
     ],
   };
 
@@ -214,7 +226,7 @@ export async function analyzeWithNemotron(
         messages: [
           {
             role: 'system',
-            content: 'You are a cybersecurity insider-threat analyst. Return only a valid JSON object matching the provided schema.',
+            content: 'You are a cybersecurity insider-threat analyst. Return only a valid JSON object matching the provided schema. Include projectedDowntime, complianceRisk (name exposed frameworks such as SOC 2, GDPR, or HIPAA), and businessImpactSummary with predictive operational impact.',
           },
           { role: 'user', content: JSON.stringify(input) },
         ],

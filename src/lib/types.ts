@@ -16,6 +16,9 @@ export interface Incident {
   threatClassification: string;
   blastRadius: number;
   impactSummary: string;
+  projectedDowntime?: string;
+  complianceRisk?: string;
+  businessImpactSummary?: string;
   recommendations: string[];
   confidence: number;
 }

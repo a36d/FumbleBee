@@ -22,6 +22,9 @@ export interface Incident {
   blastRadius: number;
   confidence: number;
   impactSummary: string;
+  projectedDowntime?: string;
+  complianceRisk?: string;
+  businessImpactSummary?: string;
   recommendations: string[];
   createdBy: string;
   createdAt: unknown;
@@ -108,6 +111,9 @@ export interface AiAnalysisInput {
   blastRadius: number;
   confidence: number;
   impactSummary: string;
+  projectedDowntime?: string;
+  complianceRisk?: string;
+  businessImpactSummary?: string;
   recommendations: string[];
   assets: AttackGraphAsset[];
   edges: AttackGraphFrontendEdge[];
@@ -463,6 +469,9 @@ export class SentinelGraphClient {
       blastRadius: analysis.blastRadius,
       confidence: analysis.confidence,
       impactSummary: analysis.impactSummary,
+      projectedDowntime: analysis.projectedDowntime ?? '',
+      complianceRisk: analysis.complianceRisk ?? '',
+      businessImpactSummary: analysis.businessImpactSummary ?? '',
       recommendations: JSON.stringify(analysis.recommendations),
       assets: JSON.stringify(analysis.assets),
       relationships: JSON.stringify(analysis.edges.map(edge => ({

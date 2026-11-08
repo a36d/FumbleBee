@@ -36,6 +36,9 @@ export interface IncidentForensicReport {
     blastRadius: number;
     confidence: number;
     impactSummary: string;
+    projectedDowntime: string;
+    complianceRisk: string;
+    businessImpactSummary: string;
     recommendations: string[];
   };
   scopeAssessment: {
@@ -294,6 +297,9 @@ export async function generateIncidentReport(incidentId: bigint): Promise<Incide
       blastRadius: Number(incident.blastRadius),
       confidence: Number(incident.confidence),
       impactSummary: incident.impactSummary || incident.summary || '',
+      projectedDowntime: incident.projectedDowntime || '',
+      complianceRisk: incident.complianceRisk || '',
+      businessImpactSummary: incident.businessImpactSummary || '',
       recommendations: parseRecommendations(incident.recommendations),
     },
     scopeAssessment,
@@ -343,6 +349,13 @@ export function reportToMarkdown(report: IncidentForensicReport): string {
     '### Impact Summary',
     '',
     summary.impactSummary || 'No impact summary available.',
+    '',
+    '## Predictive Business Impact & Compliance Exposure',
+    '',
+    `- **Projected Downtime:** ${summary.projectedDowntime || 'Pending analysis'}`,
+    `- **Compliance Risk:** ${summary.complianceRisk || 'Not yet assessed'}`,
+    '',
+    summary.businessImpactSummary || 'No predictive business impact assessment is available.',
     '',
     '### Recommendations',
     '',

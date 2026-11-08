@@ -204,6 +204,9 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
           threatClassification: liveRow.classification || "Pending Analysis",
           blastRadius: liveRow.blastRadius ?? 0,
           impactSummary: liveRow.impactSummary || fallbackIncident.impactSummary,
+          projectedDowntime: "projectedDowntime" in liveRow ? String((liveRow as { projectedDowntime?: unknown }).projectedDowntime || fallbackIncident.projectedDowntime) : fallbackIncident.projectedDowntime,
+          complianceRisk: "complianceRisk" in liveRow ? String((liveRow as { complianceRisk?: unknown }).complianceRisk || fallbackIncident.complianceRisk) : fallbackIncident.complianceRisk,
+          businessImpactSummary: "businessImpactSummary" in liveRow ? String((liveRow as { businessImpactSummary?: unknown }).businessImpactSummary || fallbackIncident.businessImpactSummary) : fallbackIncident.businessImpactSummary,
           recommendations,
           confidence: liveRow.confidence ?? 0,
         });
@@ -423,6 +426,9 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
     blastRadius: analysisResult?.blastRadius ?? incident.blastRadius,
     confidence: analysisResult?.confidence ?? incident.confidence,
     impactSummary: analysisResult?.impactSummary ?? incident.impactSummary,
+    projectedDowntime: analysisResult?.projectedDowntime ?? incident.projectedDowntime,
+    complianceRisk: analysisResult?.complianceRisk ?? incident.complianceRisk,
+    businessImpactSummary: analysisResult?.businessImpactSummary ?? incident.businessImpactSummary,
     recommendations: analysisResult?.recommendations ?? incident.recommendations,
   };
 
@@ -696,6 +702,9 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
             <div className="finding-classification"><span className="summary-label">CLASSIFICATION</span><div><strong>{findings.threatClassification}</strong><span className={`finding-severity severity-${findings.severity.toLowerCase()}`}>{findings.severity}</span></div></div>
             <div className="finding-blast"><div><span className="summary-label">ESTIMATED BLAST RADIUS</span><small>Potentially affected assets</small></div><strong>{findings.blastRadius}<span> assets</span></strong></div>
             <div className="finding-summary"><span className="summary-label">IMPACT SUMMARY</span><p>{findings.impactSummary}</p></div>
+            <div className="finding-summary"><span className="summary-label">PROJECTED DOWNTIME</span><p>{findings.projectedDowntime || "Pending analysis"}</p></div>
+            <div className="finding-summary"><span className="summary-label">COMPLIANCE RISK</span><p>{findings.complianceRisk || "Not yet assessed"}</p></div>
+            <div className="finding-summary"><span className="summary-label">BUSINESS IMPACT</span><p>{findings.businessImpactSummary || "Pending predictive analysis"}</p></div>
             <div className="recommendations"><span className="summary-label">RECOMMENDED ACTIONS</span>{findings.recommendations.map((recommendation, index) => {
               const isChecked = checked.includes(recommendation);
               return <button className={`recommendation ${isChecked ? "recommendation-done" : ""}`} key={recommendation} onClick={() => setChecked((current) => isChecked ? current.filter((value) => value !== recommendation) : [...current, recommendation])}><span className="recommendation-check">{isChecked ? <Check size={12} /> : index + 1}</span><span>{recommendation}</span><span className={`action-priority ${index === 0 ? "priority-immediate" : ""}`}>{index === 0 ? "Immediate" : "Recommended"}</span></button>;

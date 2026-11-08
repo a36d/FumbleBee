@@ -56,6 +56,9 @@ export const Incident = __t.object("Incident", {
   blastRadius: __t.u32(),
   confidence: __t.u32(),
   impactSummary: __t.string(),
+  projectedDowntime: __t.string(),
+  complianceRisk: __t.string(),
+  businessImpactSummary: __t.string(),
   recommendations: __t.string(),
   createdBy: __t.identity(),
   createdAt: __t.timestamp(),
@@ -91,4 +94,3 @@ export const User = __t.object("User", {
   passphraseHash: __t.string(),
 });
 export type User = __Infer<typeof User>;
-

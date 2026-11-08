@@ -367,6 +367,21 @@ export function AuthModal() {
                   </button>
                 </form>
                 <p className="auth-demo-notice">Role changes are authorized by the SpacetimeDB admin-only reducer.</p>
+                <div className="auth-active-roster">
+                  <span className="summary-label">ACME CORPORATION - ACTIVE RESPONDERS</span>
+                  {users.length > 0 ? (
+                    <div className="auth-role-list">
+                      {users.map((user) => (
+                        <article key={user.identity.toHexString()}>
+                          <strong>{user.username}</strong>
+                          <p>{displayRole(user.role)} · Active account</p>
+                        </article>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="auth-demo-notice">No registered responders are available yet.</p>
+                  )}
+                </div>
                 <div className="auth-role-list">
                   {responderRoles.map((responderRole) => (
                     <article key={responderRole}>
