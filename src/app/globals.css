@@ -993,6 +993,7 @@ body { color: var(--text); }
     #88a9aa 0
   );
 }
+.score-gauge span { color: hsl(var(--risk-hue, 185) 58% 36%); }
 .risk-score.risk-low { color: #28666e; }
 .risk-score.risk-medium { color: #987b20; }
 .risk-score.risk-high,
@@ -1537,9 +1538,9 @@ body { color: var(--text); }
   cursor: pointer;
 }
 .responder-admin-trigger:hover { border-color: #b99735; background: rgba(213, 187, 82, .2); }
-.auth-modal-backdrop { z-index: 60; }
+.auth-modal-backdrop { position: fixed; z-index: 1000; inset: 0; overflow-y: auto; padding: 16px; }
 .auth-modal {
-  max-height: min(90vh, 680px);
+  max-height: min(680px, calc(100dvh - 32px));
   overflow-y: auto;
   border-color: #638286;
   background: #bacbc8;

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { tables } from "@/generated/spacetimedb";
 import type { User } from "@/generated/spacetimedb/types";
@@ -308,11 +309,9 @@ export function AuthModal() {
         </button>
       </div>
 
-      {open && (
-        <div className="modal-backdrop auth-modal-backdrop" onMouseDown={(event) => {
-          if (event.target === event.currentTarget) setOpen(false);
-        }}>
-          <section className="modal-card auth-modal" role="dialog" aria-modal="true" aria-labelledby="auth-modal-title">
+      {open && createPortal(
+        <div className="modal-backdrop auth-modal-backdrop" onClick={() => setOpen(false)}>
+          <section className="modal-card auth-modal" role="dialog" aria-modal="true" aria-labelledby="auth-modal-title" onClick={(event) => event.stopPropagation()}>
             <div className="modal-heading">
               <div>
                 <span className="auth-kicker">OUT-OF-BAND RESPONSE ACCESS</span>
@@ -415,7 +414,8 @@ export function AuthModal() {
             )}
             {mode === "roles" && (error || connectionError) && <p className="auth-error" role="alert">{error || connectionError}</p>}
           </section>
-        </div>
+        </div>,
+        document.body,
       )}
     </>
   );
