@@ -114,7 +114,6 @@ export function IncidentHub() {
         if (
           row.createdBy.isEqual(identity) &&
           row.title === title &&
-          row.subjectName === subjectName &&
           row.description === description
         ) {
           resolve(row);
@@ -132,14 +131,10 @@ export function IncidentHub() {
       await connection.reducers.createIncident({
         title,
         description,
-        subjectName,
-        status: "Investigating",
         severity,
+        initialNotes: triageNotes,
       });
       const created = await createdIncident;
-      if (triageNotes) {
-        await connection.reducers.addInvestigationNote({ incidentId: created.id, content: triageNotes });
-      }
       setCreateOpen(false);
       router.push(`/investigations/${created.id}`);
     } catch (createError) {
