@@ -22,6 +22,7 @@ export interface ForensicAuditEntry {
 
 export interface IncidentForensicReport {
   reportVersion: '1.0';
+  productName: 'FumbleBee';
   incidentId: string;
   generatedAt: string;
   executiveSummary: {
@@ -230,7 +231,7 @@ export async function generateIncidentReport(incidentId: bigint): Promise<Incide
   });
 
   const integrityErrors: string[] = [];
-  let rootHash = sha256('SENTINELGRAPH-AUDIT-CHAIN-GENESIS');
+  let rootHash = sha256('FUMBLEBEE-AUDIT-CHAIN-GENESIS');
   let verifiedEntries = 0;
   let previousCurrentHash: string | null = null;
   for (const row of sortedAuditLog) {
@@ -279,6 +280,7 @@ export async function generateIncidentReport(incidentId: bigint): Promise<Incide
 
   return {
     reportVersion: '1.0',
+    productName: 'FumbleBee',
     incidentId: incidentId.toString(),
     generatedAt: new Date().toISOString(),
     executiveSummary: {
@@ -321,7 +323,7 @@ function markdownList(items: string[]): string {
 export function reportToMarkdown(report: IncidentForensicReport): string {
   const summary = report.executiveSummary;
   const lines = [
-    `# Incident #${report.incidentId} Forensic Report`,
+    `# FumbleBee Incident #${report.incidentId} Forensic Report`,
     '',
     `Generated: ${report.generatedAt}`,
     '',

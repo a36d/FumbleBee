@@ -28,7 +28,7 @@ export async function GET(
   }
 
   const format = new URL(request.url).searchParams.get('format')?.toLowerCase();
-  const filename = `incident-${context.params.id}-forensic-report.${format === 'json' ? 'json' : 'md'}`;
+  const filename = `fumblebee-incident-${context.params.id}-forensic-report.${format === 'json' ? 'json' : 'md'}`;
   if (format === 'json') {
     return new NextResponse(JSON.stringify(report, null, 2), {
       status: 200,
