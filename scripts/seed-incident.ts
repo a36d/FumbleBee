@@ -4,11 +4,58 @@ import { join } from 'node:path';
 
 const HOST = process.env.NEXT_PUBLIC_SPACETIMEDB_URI || 'http://localhost:3000';
 const DATABASE = process.env.NEXT_PUBLIC_SPACETIMEDB_MODULE || 'sentinelgraph-demo';
-const DEMO_TITLE = 'Unusual Bulk Data Access & Exfiltration Attempt';
 const DEMO_NOTES = [
   'Spike in egress traffic detected via VPC Flow Logs toward external endpoint.',
   'IAM Role assume event triggered without corresponding JIRA approval ticket.',
 ];
+
+const DEMO_INCIDENTS = [
+  {
+    title: 'Unusual Bulk Data Access & Exfiltration Attempt',
+    description: 'Exfiltration burst: 84.2 GB queried via svc-prod-data-pipeline to a staging S3 bucket outside core business hours (02:14 UTC).',
+    subjectName: 'svc-prod-data-pipeline',
+    severity: 'Critical',
+    riskScore: 94,
+    owner: 'alex.rivera',
+    initialNote: 'Initial detection: anomalous bulk data access and external staging activity.',
+  },
+  {
+    title: 'Privileged Identity Abuse in Cloud Control Plane',
+    description: 'A privileged IAM identity created unusual trust-policy changes and accessed production secrets outside an approved change window.',
+    subjectName: 'aws-iam-admin',
+    severity: 'High',
+    riskScore: 82,
+    owner: 'taylor.brooks',
+    initialNote: 'Unapproved IAM trust-policy activity detected on the cloud control plane.',
+  },
+  {
+    title: 'Suspicious Financial Data Collection',
+    description: 'Multiple restricted finance documents were collected from a corporate endpoint shortly before an unusual authentication event.',
+    subjectName: 'corp-laptop-finance',
+    severity: 'High',
+    riskScore: 76,
+    owner: 'alex.rivera',
+    initialNote: 'Restricted finance-share collection identified from an employee endpoint.',
+  },
+  {
+    title: 'Endpoint Canary Signal and Ransomware Indicators',
+    description: 'A corporate endpoint triggered a ransomware canary after rapid file renaming and defensive-tool activity.',
+    subjectName: 'taylor.brooks',
+    severity: 'Critical',
+    riskScore: 91,
+    owner: 'administrator',
+    initialNote: 'Ransomware canary triggered; endpoint containment review is required.',
+  },
+  {
+    title: 'Off-hours Account Authentication Review',
+    description: 'An employee account authenticated from a new location without confirmed travel or a matching approved access request.',
+    subjectName: 'employee-access-review',
+    severity: 'Medium',
+    riskScore: 58,
+    owner: 'administrator',
+    initialNote: 'Off-hours authentication requires identity verification before escalation.',
+  },
+] as const;
 
 function resolveSpacetimeCli(): string {
   const localAppData = process.env.LOCALAPPDATA;
@@ -105,48 +152,59 @@ function escapeSql(value: string): string {
 
 async function seedIncident() {
   console.log(`Connecting to SpacetimeDB at ${HOST}, database "${DATABASE}"...`);
+  let primaryIncidentId: bigint | null = null;
 
-  const existingRows = getSqlRows(
-    `SELECT id, title FROM Incident WHERE title = '${escapeSql(DEMO_TITLE)}'`,
-  );
-
-  let incidentId: bigint;
-  if (existingRows.length > 0) {
-    incidentId = BigInt(String(existingRows[0][0]));
-    console.log(`✓ Primary demo incident already exists (id: ${incidentId}).`);
-  } else {
-    // Call the create_incident reducer directly via CLI
-    // Matches the updated schema: title, description, subjectName, status, severity, owner, assignedTo
-    // Matches the 4 expected arguments: title, description, severity, initialNotes
-    callReducer('create_incident', [
-      DEMO_TITLE,
-      'Exfiltration burst: 84.2 GB queried via svc-prod-data-pipeline to staging S3 bucket outside core business hours (02:14 UTC). Staging bucket modified to public-read ACL.',
-      'Critical',
-      'Initial detection: anomalous burst from Morgan Chen / svc-prod-data-pipeline.',
-    ]);
-
-    const insertedRows = getSqlRows(
-      `SELECT id FROM Incident WHERE title = '${escapeSql(DEMO_TITLE)}' LIMIT 1`,
+  for (const demo of DEMO_INCIDENTS) {
+    const titleSql = escapeSql(demo.title);
+    const existingRows = getSqlRows(
+      `SELECT id FROM Incident WHERE title = '${titleSql}' LIMIT 1`,
     );
-    if (insertedRows.length === 0) {
-      throw new Error('Incident reducer completed but the incident was not found.');
+
+    let incidentId: bigint;
+    if (existingRows.length > 0) {
+      incidentId = BigInt(String(existingRows[0][0]));
+      console.log(`✓ Demo incident already exists (id: ${incidentId}): "${demo.title}"`);
+    } else {
+      callReducer('create_incident', [
+        demo.title,
+        demo.description,
+        demo.severity,
+        demo.initialNote,
+      ]);
+
+      const insertedRows = getSqlRows(
+        `SELECT id FROM Incident WHERE title = '${titleSql}' LIMIT 1`,
+      );
+      if (insertedRows.length === 0) {
+        throw new Error(`Incident reducer completed but "${demo.title}" was not found.`);
+      }
+      incidentId = BigInt(String(insertedRows[0][0]));
+      console.log(`✓ Seeded incident "${demo.title}" (id: ${incidentId}).`);
     }
-    incidentId = BigInt(String(insertedRows[0][0]));
-    console.log(`✓ Seeded incident "${DEMO_TITLE}" (id: ${incidentId}).`);
+
+    runSql(
+      `UPDATE Incident SET subject_name = '${escapeSql(demo.subjectName)}', severity = '${demo.severity}', status = 'Investigating', risk_score = ${demo.riskScore}, owner = '${demo.owner}', assigned_to = '${demo.owner}' WHERE id = ${incidentId.toString()}`,
+    );
+
+    if (demo.title === DEMO_INCIDENTS[0].title) {
+      primaryIncidentId = incidentId;
+    }
   }
 
-  const existingNotes = getSqlRows(
-    `SELECT content FROM InvestigationNote WHERE incident_id = ${incidentId.toString()}`,
-  ).map(row => String(row[0]));
+  if (primaryIncidentId) {
+    const existingNotes = getSqlRows(
+      `SELECT content FROM InvestigationNote WHERE incident_id = ${primaryIncidentId.toString()}`,
+    ).map(row => String(row[0]));
 
-  for (const content of DEMO_NOTES) {
-    if (existingNotes.includes(content)) {
-      console.log(`✓ Investigation note already exists: "${content}"`);
-      continue;
+    for (const content of DEMO_NOTES) {
+      if (existingNotes.includes(content)) {
+        console.log(`✓ Investigation note already exists: "${content}"`);
+        continue;
+      }
+
+      callReducer('add_investigation_note', [primaryIncidentId, content]);
+      console.log(`✓ Added investigation note: "${content}"`);
     }
-
-    callReducer('add_investigation_note', [incidentId, content]);
-    console.log(`✓ Added investigation note: "${content}"`);
   }
 
   console.log('✅ SentinelGraph demo seed completed successfully.');
