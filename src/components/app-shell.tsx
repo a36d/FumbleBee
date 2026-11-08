@@ -3,10 +3,11 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import Image from "next/image";
-import { Bell, ChevronDown, X } from "lucide-react";
+import { Bell, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { AuthModal } from "@/components/auth-modal";
 import { ProfileDialog } from "@/components/profile-dialog";
+import { CompanySwitcher } from "@/components/company-switcher";
 import { SpacetimeConnectionProvider } from "@/components/spacetime-connection-provider";
 import { useSpacetimeConnection } from "@/components/spacetime-connection-provider";
 import { tables } from "@/generated/spacetimedb";
@@ -250,8 +251,6 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
       router.replace("/personal-incidents");
     }
   }, [isEmployee, pathname, router]);
-  const [authOpenToken, setAuthOpenToken] = useState(0);
-
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -259,16 +258,7 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
           <Image className="brand-logo" src="/fumblebee-bee.png" alt="" width={42} height={42} priority />
           <span className="brand-name">FumbleBee</span>
         </Link>
-        <button
-          type="button"
-          className="workspace-switch"
-          onClick={() => setAuthOpenToken((current) => current + 1)}
-          aria-label="Open Acme Corporation organization and role management"
-        >
-          <span className="workspace-icon">A</span>
-          <span className="workspace-copy"><strong>Acme Corporation</strong><small>Enterprise workspace</small></span>
-          <ChevronDown size={14} />
-        </button>
+        <CompanySwitcher />
         <div className="nav-label">WORKSPACE</div>
         <WorkspaceNavigation isInvestigation={isInvestigation} isIncidents={isIncidents} isPersonalIncidents={isPersonalIncidents} incidentId={incidentId} />
         <div className="sidebar-bottom">
@@ -282,7 +272,7 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
           <div className="topbar-actions">
             <NotificationBell />
             <div className="topbar-divider" />
-            <AuthModal externalOpenToken={authOpenToken} />
+            <AuthModal />
           </div>
         </header>
         <main className="page-content">{children}</main>

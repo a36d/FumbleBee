@@ -283,7 +283,7 @@ export function Dashboard() {
           value={String(activeInvestigationCount)}
         />
         <MetricCard
-          label="High-risk users / responders"
+          label="High-risk users"
           value={String(highRiskUserCount)}
         />
         <MetricCard

@@ -2,11 +2,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import { CircleCheck, KeyRound, Loader2, Mail, Save, ShieldAlert, UserRound, X } from "lucide-react";
 import { tables } from "@/generated/spacetimedb";
 import type { Incident, User } from "@/generated/spacetimedb/types";
 import { useSpacetimeConnection } from "@/components/spacetime-connection-provider";
 import { hashPassword } from "@/lib/auth";
+import { readImageFile } from "@/lib/image-upload";
 
 function riskLabel(score: number): string {
   if (score >= 80) return "Critical";
@@ -19,7 +19,7 @@ function withTimeout<T>(operation: Promise<T>, timeoutMs = 5000): Promise<T> {
   let timeoutId: number | undefined;
   const timeout = new Promise<never>((_resolve, reject) => {
     timeoutId = window.setTimeout(
-      () => reject(new Error("The SpacetimeDB responder did not respond within 5 seconds. Please try again.")),
+      () => reject(new Error("The account service did not respond within 5 seconds. Please try again.")),
       timeoutMs,
     );
   });
@@ -29,7 +29,7 @@ function withTimeout<T>(operation: Promise<T>, timeoutMs = 5000): Promise<T> {
 }
 
 export function ProfileDialog() {
-  const { connection, connectionError, responderSession } = useSpacetimeConnection();
+  const { connection, connectionError, responderSession, updateResponderPhoto } = useSpacetimeConnection();
   const session = responderSession;
   const [profile, setProfile] = useState<User | null>(null);
   const [incidents, setIncidents] = useState<Incident[]>([]);
@@ -41,6 +41,7 @@ export function ProfileDialog() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
   const [savingPassword, setSavingPassword] = useState(false);
+  const [savingPhoto, setSavingPhoto] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
@@ -101,6 +102,33 @@ export function ProfileDialog() {
   const riskStatus = relatedIncidents.length ? riskLabel(personalRisk) : "No direct exposure";
   const initials = (profile?.name || session?.username || "U").slice(0, 2).toUpperCase();
 
+  async function changeProfilePhoto(file: File | undefined) {
+    if (!file || !session) return;
+    setSavingPhoto(true);
+    setError("");
+    setNotice("");
+    try {
+      const avatarDataUrl = await readImageFile(file);
+      updateResponderPhoto(avatarDataUrl, profile?.email);
+      setNotice("Profile photo updated.");
+    } catch (photoError) {
+      setError(photoError instanceof Error ? photoError.message : "Could not update profile photo.");
+    } finally {
+      setSavingPhoto(false);
+    }
+  }
+
+  function removeProfilePhoto() {
+    setError("");
+    setNotice("");
+    try {
+      updateResponderPhoto(undefined, profile?.email);
+      setNotice("Profile photo removed.");
+    } catch (photoError) {
+      setError(photoError instanceof Error ? photoError.message : "Could not remove profile photo.");
+    }
+  }
+
   async function saveContactInfo(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!connection || !profile) {
@@ -159,12 +187,13 @@ export function ProfileDialog() {
   return (
     <>
       <button className="profile-button" type="button" onClick={showDialog} aria-haspopup="dialog">
-        <span className="avatar avatar-green">{initials}</span>
+        <span className="avatar avatar-green">
+          {session?.avatarDataUrl ? <img src={session.avatarDataUrl} alt="" /> : initials}
+        </span>
         <span className="profile-copy">
           <strong>{profile?.name ?? session?.username ?? "My profile"}</strong>
-          <small>{profile?.role ?? (session ? "Responder" : "Sign in to manage profile")}</small>
+          <small>{profile?.role ?? (session ? "Account" : "Sign in to manage profile")}</small>
         </span>
-        <UserRound size={14} />
       </button>
 
       {open && createPortal(
@@ -172,31 +201,31 @@ export function ProfileDialog() {
           <section className="profile-dialog" role="dialog" aria-modal="true" aria-labelledby="profile-dialog-title" onClick={(event) => event.stopPropagation()}>
             <header className="profile-dialog-header">
               <div className="profile-identity">
-                <span className="profile-dialog-avatar">{initials}</span>
+                <span className="profile-dialog-avatar">
+                  {session?.avatarDataUrl ? <img src={session.avatarDataUrl} alt="" /> : initials}
+                </span>
                 <div>
-                  <span className="profile-eyebrow">RESPONDER ACCOUNT</span>
+                  <span className="profile-eyebrow">USER ACCOUNT</span>
                   <h2 id="profile-dialog-title">{profile?.name ?? session?.username ?? "Your profile"}</h2>
                   <p>{profile ? `${profile.username} · ${profile.role}` : "Sign in to manage your account"}</p>
                 </div>
               </div>
-              <button className="profile-close" type="button" onClick={() => setOpen(false)} aria-label="Close profile"><X size={18} /></button>
+              <button className="profile-close" type="button" onClick={() => setOpen(false)}>Close</button>
             </header>
 
             {!session ? (
               <div className="profile-offline-state">
-                <ShieldAlert size={20} />
                 <div>
-                  <strong>No active responder session</strong>
+                  <strong>No account signed in</strong>
                   <p>Sign in from the top bar to edit contact information, change your password, and view account-linked risk.</p>
                 </div>
               </div>
             ) : (
               <>
                 {!connection && <p className="profile-connection-note">{connectionError || "Waiting for SpacetimeDB connection. Profile changes are unavailable while offline."}</p>}
-                {session && connection && !profile && <p className="profile-connection-note">Could not find this responder account in the connected database.</p>}
+                {session && connection && !profile && <p className="profile-connection-note">Could not find this user account in the connected database.</p>}
 
                 <div className="profile-risk-card" data-risk={riskLabel(personalRisk).toLowerCase()}>
-                  <div className="profile-risk-icon"><ShieldAlert size={18} /></div>
                   <div className="profile-risk-copy">
                     <span>PERSONAL RISK EXPOSURE</span>
                     <strong>{riskStatus}</strong>
@@ -220,7 +249,7 @@ export function ProfileDialog() {
                 )}
 
                 <form className="profile-settings-form" onSubmit={saveContactInfo}>
-                  <div className="profile-section-heading"><Mail size={15} /><h3>Contact information</h3></div>
+                  <div className="profile-section-heading"><span className="profile-section-kicker">ACCOUNT DETAILS</span><h3>Contact information</h3></div>
                   <label>
                     Display name
                     <input value={name} onChange={(event) => setName(event.target.value)} maxLength={100} required />
@@ -230,13 +259,41 @@ export function ProfileDialog() {
                     <input type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} maxLength={254} required />
                   </label>
                   <button className="profile-submit" type="submit" disabled={!connection || !profile || savingProfile || !name.trim() || !email.trim()}>
-                    {savingProfile ? <Loader2 className="profile-spinner" size={15} /> : <Save size={15} />}
                     {savingProfile ? "Saving contact info..." : "Save contact info"}
                   </button>
                 </form>
 
+                <section className="profile-settings-form">
+                  <div className="profile-section-heading"><span className="profile-section-kicker">IDENTITY</span><h3>Profile photo</h3></div>
+                  <div className="profile-photo-controls">
+                    <span className="profile-dialog-avatar profile-photo-preview">
+                      {session.avatarDataUrl ? <img src={session.avatarDataUrl} alt="Current profile photo" /> : initials}
+                    </span>
+                    <div className="profile-photo-actions">
+                      <label className="profile-submit profile-photo-upload" aria-disabled={savingPhoto}>
+                        {savingPhoto ? "Saving photo..." : "Change photo"}
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp"
+                          disabled={savingPhoto}
+                          onChange={(event) => {
+                            const input = event.currentTarget;
+                            void changeProfilePhoto(input.files?.[0]).finally(() => { input.value = ""; });
+                          }}
+                        />
+                      </label>
+                      {session.avatarDataUrl && (
+                        <button className="profile-submit profile-submit-secondary" type="button" onClick={removeProfilePhoto} disabled={savingPhoto}>
+                          Remove photo
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  <p className="profile-form-hint">JPG, PNG, or WebP up to 512 KB. Saved to this browser.</p>
+                </section>
+
                 <form className="profile-settings-form profile-password-form" onSubmit={saveNewPassword}>
-                  <div className="profile-section-heading"><KeyRound size={15} /><h3>Change password</h3></div>
+                  <div className="profile-section-heading"><span className="profile-section-kicker">SECURITY</span><h3>Change password</h3></div>
                   <label>
                     Current password
                     <input type="password" autoComplete="current-password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} required />
@@ -253,14 +310,12 @@ export function ProfileDialog() {
                   </div>
                   <p className="profile-form-hint">Use at least 8 characters. Your current password is required to make this change.</p>
                   <button className="profile-submit profile-submit-secondary" type="submit" disabled={!connection || !profile || savingPassword || !currentPassword || newPassword.length < 8 || !confirmPassword}>
-                    {savingPassword ? <Loader2 className="profile-spinner" size={15} /> : <KeyRound size={15} />}
                     {savingPassword ? "Updating password..." : "Update password"}
                   </button>
                 </form>
 
                 {(error || notice) && (
                   <p className={error ? "profile-feedback profile-error" : "profile-feedback profile-success"}>
-                    {error ? <ShieldAlert size={14} /> : <CircleCheck size={14} />}
                     {error || notice}
                   </p>
                 )}

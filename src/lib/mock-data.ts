@@ -117,7 +117,7 @@ export const incidents: Incident[] = [
 ];
 
 export const assets: Asset[] = [
-  { id: "u-morgan", name: "Morgan Chen", type: "identity", description: "Senior Product Engineer · mchen@acme.io", riskLabel: "Compromised identity" },
+  { id: "u-morgan", name: "Morgan Chen", type: "identity", description: "Senior Product Engineer · mchen@example.com", riskLabel: "Compromised identity" },
   { id: "s-eng", name: "Engineering Share", type: "share", description: "Restricted · 2.4 TB · 1,280 files", riskLabel: "Sensitive access" },
   { id: "s-source", name: "Source Repository", type: "share", description: "Product source · 46 repositories", riskLabel: "High-value asset" },
   { id: "d-customer", name: "Customer DB", type: "database", description: "Production · 84,209 records", riskLabel: "Critical data" },
@@ -157,7 +157,7 @@ export const activity: ActivityFeed[] = [
 
 export const auditLogs: AuditLog[] = [
   { id: "l3", sequence: 3, action: "AI analysis completed", actor: "fumblebee.ai", timestamp: "2024-11-18T10:14:00Z", previousHash: "97af0c1a8b2e5d40", currentHash: "c04e8db7f912a6e3" },
-  { id: "l2", sequence: 2, action: "Investigation note added", actor: "priya.shah@acme.io", timestamp: "2024-11-18T10:12:00Z", previousHash: "f63d281a4c91b7e0", currentHash: "97af0c1a8b2e5d40" },
+  { id: "l2", sequence: 2, action: "Investigation note added", actor: "priya.shah@example.com", timestamp: "2024-11-18T10:12:00Z", previousHash: "f63d281a4c91b7e0", currentHash: "97af0c1a8b2e5d40" },
   { id: "l1", sequence: 1, action: "Incident created", actor: "detection.engine", timestamp: "2024-11-18T09:42:00Z", previousHash: "0000000000000000", currentHash: "f63d281a4c91b7e0" },
 ];
 

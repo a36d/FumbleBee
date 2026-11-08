@@ -9,6 +9,7 @@ export interface ResponderSessionProfile {
   username: string;
   role: "Admin" | "Employee";
   token?: string;
+  avatarDataUrl?: string;
 }
 
 interface SpacetimeConnectionContextValue {
@@ -18,6 +19,7 @@ interface SpacetimeConnectionContextValue {
   sessionLoaded: boolean;
   saveSession: (profile: ResponderSessionProfile) => void;
   switchSession: (profile: ResponderSessionProfile) => void;
+  updateResponderPhoto: (avatarDataUrl: string | undefined, email?: string) => void;
 }
 
 const sessionStorageKey = "fumblebee_session";
@@ -52,7 +54,13 @@ function readSavedProfile(): ResponderSessionProfile | null {
       typeof parsed.role === "string"
     ) {
       const role = parsed.role === "Admin" || parsed.role === "admin" ? "Admin" : "Employee";
-      return { username: parsed.username, role };
+      return {
+        username: parsed.username,
+        role,
+        ...("avatarDataUrl" in parsed && typeof parsed.avatarDataUrl === "string"
+          ? { avatarDataUrl: parsed.avatarDataUrl }
+          : {}),
+      };
     }
     return null;
   } catch {
@@ -115,7 +123,11 @@ export function SpacetimeConnectionProvider({ children }: { children: React.Reac
 
   function saveSession(profile: ResponderSessionProfile) {
     const savedProfile = authToken ? { ...profile, token: authToken } : profile;
-    setResponderSession({ username: profile.username, role: profile.role });
+    setResponderSession({
+      username: profile.username,
+      role: profile.role,
+      ...(profile.avatarDataUrl ? { avatarDataUrl: profile.avatarDataUrl } : {}),
+    });
     localStorage.setItem(sessionStorageKey, JSON.stringify(savedProfile));
     if (!authToken) return;
     const storedSessions = localStorage.getItem(responderSessionsStorageKey);
@@ -129,15 +141,84 @@ export function SpacetimeConnectionProvider({ children }: { children: React.Reac
 
   function switchSession(profile: ResponderSessionProfile) {
     if (!profile.token) {
-      throw new Error("This responder has no saved SpacetimeDB session on this device.");
+      throw new Error("This account has no saved SpacetimeDB session on this device.");
     }
     localStorage.setItem(sessionStorageKey, JSON.stringify(profile));
-    setResponderSession({ username: profile.username, role: profile.role });
+    setResponderSession({
+      username: profile.username,
+      role: profile.role,
+      ...(profile.avatarDataUrl ? { avatarDataUrl: profile.avatarDataUrl } : {}),
+    });
     window.location.reload();
   }
 
+  function updateResponderPhoto(avatarDataUrl: string | undefined, email?: string) {
+    if (!responderSession) throw new Error("Sign in before updating your profile photo.");
+
+    const updatedSession: ResponderSessionProfile = {
+      username: responderSession.username,
+      role: responderSession.role,
+      ...(responderSession.token ? { token: responderSession.token } : {}),
+      ...(avatarDataUrl ? { avatarDataUrl } : {}),
+    };
+
+    const savedSessionValue = localStorage.getItem(sessionStorageKey);
+    if (savedSessionValue) {
+      const savedSession: unknown = JSON.parse(savedSessionValue);
+      if (savedSession && typeof savedSession === "object" && "token" in savedSession && typeof savedSession.token === "string") {
+        updatedSession.token = savedSession.token;
+      }
+    }
+
+    const localRespondersValue: unknown = JSON.parse(localStorage.getItem("fumblebee_local_responders") ?? "[]");
+    const localResponders = Array.isArray(localRespondersValue) ? localRespondersValue : [];
+    const responderIndex = localResponders.findIndex((responder) =>
+      responder && typeof responder === "object" &&
+      "name" in responder && typeof responder.name === "string" &&
+      responder.name.toLowerCase() === responderSession.username.toLowerCase(),
+    );
+    const existingResponder = responderIndex >= 0 ? localResponders[responderIndex] : null;
+    const updatedResponder = {
+      ...(existingResponder && typeof existingResponder === "object" ? existingResponder : {}),
+      name: responderSession.username,
+      email: email ?? (existingResponder && typeof existingResponder === "object" && "email" in existingResponder && typeof existingResponder.email === "string" ? existingResponder.email : ""),
+      role: responderSession.role,
+      timestamp: Date.now(),
+      ...(avatarDataUrl ? { photoDataUrl: avatarDataUrl } : {}),
+    };
+    if (!avatarDataUrl) delete updatedResponder.photoDataUrl;
+    const nextLocalResponders = [...localResponders];
+    if (responderIndex >= 0) nextLocalResponders[responderIndex] = updatedResponder;
+    else nextLocalResponders.push(updatedResponder);
+
+    const storedSessionsValue: unknown = JSON.parse(localStorage.getItem(responderSessionsStorageKey) ?? "[]");
+    const storedSessions = Array.isArray(storedSessionsValue) ? storedSessionsValue : [];
+    const nextSavedSessions = storedSessions.map((savedProfile) => {
+      if (
+        !savedProfile ||
+        typeof savedProfile !== "object" ||
+        !("username" in savedProfile) ||
+        typeof savedProfile.username !== "string" ||
+        savedProfile.username.toLowerCase() !== responderSession.username.toLowerCase()
+      ) return savedProfile;
+      return {
+        ...savedProfile,
+        ...(avatarDataUrl ? { avatarDataUrl } : {}),
+        ...(!avatarDataUrl ? { avatarDataUrl: undefined } : {}),
+      };
+    });
+
+    localStorage.setItem(sessionStorageKey, JSON.stringify(updatedSession));
+    localStorage.setItem("fumblebee_active_responder", JSON.stringify(updatedSession));
+    localStorage.setItem("fumblebee_local_responders", JSON.stringify(nextLocalResponders));
+    if (storedSessions.length > 0) {
+      localStorage.setItem(responderSessionsStorageKey, JSON.stringify(nextSavedSessions));
+    }
+    setResponderSession(updatedSession);
+  }
+
   return (
-    <SpacetimeConnectionContext.Provider value={{ connection, connectionError, responderSession, sessionLoaded, saveSession, switchSession }}>
+    <SpacetimeConnectionContext.Provider value={{ connection, connectionError, responderSession, sessionLoaded, saveSession, switchSession, updateResponderPhoto }}>
       {children}
     </SpacetimeConnectionContext.Provider>
   );

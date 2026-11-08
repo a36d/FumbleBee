@@ -226,7 +226,7 @@ export function IncidentHub({ personalOnly = false }: { personalOnly?: boolean }
 
     const identity = connection.identity;
     if (!identity) {
-      setError("SpacetimeDB has not identified this responder. Reconnect and try again.");
+      setError("SpacetimeDB has not identified this user. Reconnect and try again.");
       return;
     }
 
@@ -292,7 +292,7 @@ export function IncidentHub({ personalOnly = false }: { personalOnly?: boolean }
         <div className="incident-hub-heading">
           <div className="eyebrow"><span className="eyebrow-line" /> {personalOnly ? "ASSIGNED RESPONSE QUEUE" : "SOVEREIGN RESPONSE ENVIRONMENT"}</div>
           <h1>{personalOnly ? "Personal Incidents" : "Security Incidents"}</h1>
-          <p>{personalOnly ? "Incidents assigned to your responder account." : "Live incident operations across your organization."}</p>
+          <p>{personalOnly ? "Incidents assigned to your account." : "Live incident operations across your organization."}</p>
         </div>
         {!personalOnly && <div className="incident-hub-metrics">
           <div className="hub-metric-chip"><span>Total Active Incidents</span><strong>{activeIncidents.length}</strong></div>

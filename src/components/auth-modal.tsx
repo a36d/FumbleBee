@@ -2,11 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { X } from "lucide-react";
 import { tables } from "@/generated/spacetimedb";
 import type { User } from "@/generated/spacetimedb/types";
 import { useSpacetimeConnection } from "@/components/spacetime-connection-provider";
 import { hashPassword } from "@/lib/auth";
+import { readImageFile } from "@/lib/image-upload";
 import type { AppRole } from "@/lib/roles";
 import { normalizeRole } from "@/lib/roles";
 import { useRouter } from "next/navigation";
@@ -15,11 +15,12 @@ const responderRoles: AppRole[] = ["Admin", "Employee"];
 
 type ResponderRole = AppRole;
 type AssignableRole = ResponderRole;
-type AuthMode = "signin" | "register" | "roles";
+type AuthMode = "signin" | "register";
 
 interface ResponderSession {
   username: string;
   role: ResponderRole;
+  avatarDataUrl?: string;
 }
 
 interface SavedResponderSession extends ResponderSession {
@@ -32,7 +33,7 @@ function withTimeout<T>(operation: Promise<T>, timeoutMs = 5000): Promise<T> {
   let timeoutId: number | undefined;
   const timeout = new Promise<never>((_resolve, reject) => {
     timeoutId = window.setTimeout(
-      () => reject(new Error("The SpacetimeDB responder did not respond within 5 seconds. Please try again.")),
+      () => reject(new Error("The account service did not respond within 5 seconds. Please try again.")),
       timeoutMs,
     );
   });
@@ -42,7 +43,7 @@ function withTimeout<T>(operation: Promise<T>, timeoutMs = 5000): Promise<T> {
 }
 
 const roleDescriptions: Record<ResponderRole, string> = {
-  Admin: "View all incidents, manage responders, and coordinate incident response.",
+  Admin: "View all incidents, manage user accounts, and coordinate incident response.",
   Employee: "View and work incidents assigned to your account.",
 };
 
@@ -75,19 +76,41 @@ function isSavedResponderSession(value: unknown): value is SavedResponderSession
     "role" in value &&
     isResponderRole(value.role) &&
     "token" in value &&
-    typeof value.token === "string",
+    typeof value.token === "string" &&
+    (!("avatarDataUrl" in value) || typeof value.avatarDataUrl === "string"),
   );
 }
 
+function getResponderPhoto(username: string): string | undefined {
+  try {
+    const savedResponders: unknown = JSON.parse(localStorage.getItem("fumblebee_local_responders") ?? "[]");
+    if (!Array.isArray(savedResponders)) return undefined;
+    const responder = savedResponders.find((entry) =>
+      entry && typeof entry === "object" &&
+      "name" in entry && typeof entry.name === "string" &&
+      entry.name.toLowerCase() === username.toLowerCase() &&
+      "photoDataUrl" in entry && typeof entry.photoDataUrl === "string",
+    );
+    return responder && "photoDataUrl" in responder && typeof responder.photoDataUrl === "string"
+      ? responder.photoDataUrl
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export function AuthModal({ externalOpenToken = 0 }: { externalOpenToken?: number }) {
-  const { connection, connectionError, saveSession, switchSession } = useSpacetimeConnection();
+  const { connection, connectionError, responderSession, saveSession, switchSession } = useSpacetimeConnection();
   const router = useRouter();
   const [session, setSession] = useState<ResponderSession | null>(null);
   const [hydrated, setHydrated] = useState(false);
   const [mode, setMode] = useState<AuthMode>("signin");
-  const [open, setOpen] = useState(false);
+  const [authOpen, setAuthOpen] = useState(false);
+  const [managementOpen, setManagementOpen] = useState(false);
   const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [accountPhoto, setAccountPhoto] = useState("");
   const [role, setRole] = useState<ResponderRole>("Employee");
   const [users, setUsers] = useState<ResponderAccount[]>([]);
   const [savedSessions, setSavedSessions] = useState<SavedResponderSession[]>([]);
@@ -102,9 +125,8 @@ export function AuthModal({ externalOpenToken = 0 }: { externalOpenToken?: numbe
 
   useEffect(() => {
     if (externalOpenToken > 0) {
-      setMode("roles");
       setError("");
-      setOpen(true);
+      setManagementOpen(true);
     }
   }, [externalOpenToken]);
 
@@ -113,6 +135,10 @@ export function AuthModal({ externalOpenToken = 0 }: { externalOpenToken?: numbe
     const timeoutId = window.setTimeout(() => setNotice(""), 5000);
     return () => window.clearTimeout(timeoutId);
   }, [notice]);
+
+  useEffect(() => {
+    setSession(responderSession);
+  }, [responderSession]);
 
   useEffect(() => {
     try {
@@ -127,7 +153,13 @@ export function AuthModal({ externalOpenToken = 0 }: { externalOpenToken?: numbe
           "role" in parsed &&
           typeof parsed.role === "string"
         ) {
-          setSession({ username: parsed.username, role: normalizeRole(parsed.role) });
+          setSession({
+            username: parsed.username,
+            role: normalizeRole(parsed.role),
+            ...("avatarDataUrl" in parsed && typeof parsed.avatarDataUrl === "string"
+              ? { avatarDataUrl: parsed.avatarDataUrl }
+              : {}),
+          });
         }
       }
       const savedSessionsValue: unknown = JSON.parse(localStorage.getItem("fumblebee_responder_sessions") ?? "[]");
@@ -135,7 +167,7 @@ export function AuthModal({ externalOpenToken = 0 }: { externalOpenToken?: numbe
         setSavedSessions(savedSessionsValue.filter(isSavedResponderSession));
       }
     } catch {
-      setError("Saved responder session could not be read.");
+      setError("Saved account session could not be read.");
     } finally {
       setHydrated(true);
     }
@@ -176,62 +208,34 @@ export function AuthModal({ externalOpenToken = 0 }: { externalOpenToken?: numbe
     };
   }, [connection]);
 
-  function openModal(nextMode: AuthMode) {
+  function openAuthModal(nextMode: AuthMode) {
     setMode(nextMode);
     setError("");
-    setOpen(true);
+    setAuthOpen(true);
+  }
+
+  function openManagementModal() {
+    setError("");
+    setManagementOpen(true);
   }
 
   async function submitSession(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const formData = { name: username, role };
+    const formData = { name: username, email, role };
     const registering = mode === "register";
     const newResponder = registering
       ? {
           name: formData.name.trim(),
+          email: formData.email.trim(),
           role: formData.role || "Employee",
           timestamp: Date.now(),
+          ...(accountPhoto ? { photoDataUrl: accountPhoto } : {}),
         }
       : null;
     const cleanUsername = (newResponder?.name ?? formData.name.trim());
 
-    if (!cleanUsername || !password) {
-      setError("Enter a username and password to continue.");
-      return;
-    }
-
-    if (registering && newResponder?.role === "Admin") {
-      if (!connection) {
-        setError(connectionError || "Admin registration requires a verified SpacetimeDB connection.");
-        return;
-      }
-      setSubmitting(true);
-      setError("");
-      setNotice("");
-      try {
-        const passwordHash = await hashPassword(password);
-        await withTimeout(connection.reducers.signUp({
-          username: newResponder.name,
-          passwordHash,
-          role: "Admin",
-        }));
-        const nextSession = { username: newResponder.name, role: newResponder.role };
-        try {
-          saveSession(nextSession);
-          localStorage.setItem("fumblebee_active_responder", JSON.stringify(nextSession));
-        } catch (storageError) {
-          setNotice(storageError instanceof Error ? storageError.message : "Admin account created, but the session could not be saved.");
-        }
-        setSession(nextSession);
-        setOpen(false);
-        setUsername("");
-        setPassword("");
-        router.replace("/");
-      } catch (registrationError) {
-        setError(registrationError instanceof Error ? registrationError.message : "Admin registration failed.");
-      } finally {
-        setSubmitting(false);
-      }
+    if (!cleanUsername || !password || (registering && !newResponder?.email)) {
+      setError(registering ? "Enter a username, work email, and password to continue." : "Enter a username and password to continue.");
       return;
     }
 
@@ -239,7 +243,11 @@ export function AuthModal({ externalOpenToken = 0 }: { externalOpenToken?: numbe
       setSubmitting(true);
       setError("");
       setNotice("");
-      const nextSession = { username: newResponder.name, role: newResponder.role };
+      const nextSession = {
+        username: newResponder.name,
+        role: newResponder.role,
+        ...(accountPhoto ? { avatarDataUrl: accountPhoto } : {}),
+      };
       let responderStored = false;
 
       try {
@@ -251,6 +259,8 @@ export function AuthModal({ externalOpenToken = 0 }: { externalOpenToken?: numbe
                 typeof responder === "object" &&
                 "name" in responder &&
                 typeof responder.name === "string" &&
+                "email" in responder &&
+                typeof responder.email === "string" &&
                 "role" in responder &&
                 typeof responder.role === "string" &&
                 "timestamp" in responder &&
@@ -267,7 +277,7 @@ export function AuthModal({ externalOpenToken = 0 }: { externalOpenToken?: numbe
         );
         responderStored = true;
       } catch {
-        setNotice("Browser storage is unavailable; responder is active for this session only.");
+        setNotice("Browser storage is unavailable; the account is active for this session only.");
       }
 
       try {
@@ -276,7 +286,7 @@ export function AuthModal({ externalOpenToken = 0 }: { externalOpenToken?: numbe
         try {
           localStorage.setItem("fumblebee_session", JSON.stringify(nextSession));
         } catch {
-          setNotice("Responder is active for this session only; browser storage is unavailable.");
+          setNotice("The account is active for this session only; browser storage is unavailable.");
         }
       }
       try {
@@ -284,12 +294,14 @@ export function AuthModal({ externalOpenToken = 0 }: { externalOpenToken?: numbe
         const savedSessionsValue: unknown = JSON.parse(localStorage.getItem("fumblebee_responder_sessions") ?? "[]");
         setSavedSessions(Array.isArray(savedSessionsValue) ? savedSessionsValue.filter(isSavedResponderSession) : []);
       } catch {
-        setNotice("Responder is active for this session, but browser storage is unavailable.");
+        setNotice("The account is active for this session, but browser storage is unavailable.");
       }
       setSession(nextSession);
-      setOpen(false);
+      setAuthOpen(false);
       setUsername("");
+      setEmail("");
       setPassword("");
+      setAccountPhoto("");
       setSubmitting(false);
       router.replace(newResponder.role === "Employee" ? "/personal-incidents" : "/");
 
@@ -309,6 +321,7 @@ export function AuthModal({ externalOpenToken = 0 }: { externalOpenToken?: numbe
       void hashPassword(password)
         .then((passwordHash) => withTimeout(connection.reducers.signUp({
           username: newResponder.name,
+          email: newResponder.email,
           passwordHash,
           role: reducerRole(newResponder.role),
         })))
@@ -339,7 +352,12 @@ export function AuthModal({ externalOpenToken = 0 }: { externalOpenToken?: numbe
       const authenticatedUser = Array.from(connection.db.user.iter())
         .find((user) => user.username === cleanUsername);
       const nextRole = responderRoleFromDatabase(authenticatedUser?.role ?? existingUser?.role ?? "");
-      const nextSession = { username: cleanUsername, role: nextRole };
+      const avatarDataUrl = getResponderPhoto(cleanUsername);
+      const nextSession = {
+        username: cleanUsername,
+        role: nextRole,
+        ...(avatarDataUrl ? { avatarDataUrl } : {}),
+      };
       try {
         saveSession(nextSession);
       } catch {
@@ -349,9 +367,11 @@ export function AuthModal({ externalOpenToken = 0 }: { externalOpenToken?: numbe
       setSession(nextSession);
       const savedSessionsValue: unknown = JSON.parse(localStorage.getItem("fumblebee_responder_sessions") ?? "[]");
       setSavedSessions(Array.isArray(savedSessionsValue) ? savedSessionsValue.filter(isSavedResponderSession) : []);
-      setOpen(false);
+      setAuthOpen(false);
       setUsername("");
+      setEmail("");
       setPassword("");
+      setAccountPhoto("");
       setError("");
       router.replace(nextRole === "Employee" ? "/personal-incidents" : "/");
     } catch (submitError) {
@@ -364,13 +384,13 @@ export function AuthModal({ externalOpenToken = 0 }: { externalOpenToken?: numbe
   function changeResponderSession() {
     const nextSession = savedSessions.find((saved) => saved.username === sessionToSwitch);
     if (!nextSession) {
-      setError("Choose a responder session saved on this device.");
+      setError("Choose an account session saved on this device.");
       return;
     }
     try {
       switchSession(nextSession);
     } catch (switchError) {
-      setError(switchError instanceof Error ? switchError.message : "Could not switch responder session.");
+      setError(switchError instanceof Error ? switchError.message : "Could not switch account session.");
     }
   }
 
@@ -378,12 +398,15 @@ export function AuthModal({ externalOpenToken = 0 }: { externalOpenToken?: numbe
     try {
       localStorage.removeItem("fumblebee_session");
       setSession(null);
+      setManagementOpen(false);
+      setAuthOpen(false);
       setUsername("");
+      setEmail("");
       setPassword("");
       setError("");
       window.location.reload();
     } catch {
-      setError("Responder session could not be cleared.");
+      setError("Account session could not be cleared.");
     }
   }
 
@@ -395,7 +418,7 @@ export function AuthModal({ externalOpenToken = 0 }: { externalOpenToken?: numbe
     }
     const target = users.find((user) => user.identity.toHexString() === targetIdentity);
     if (!target) {
-      setError("Select an existing responder account.");
+      setError("Select an existing user account.");
       return;
     }
 
@@ -407,7 +430,7 @@ export function AuthModal({ externalOpenToken = 0 }: { externalOpenToken?: numbe
         newRole: reducerRole(newRole),
       }));
     } catch (assignError) {
-      setError(assignError instanceof Error ? assignError.message : "Responder role update failed.");
+      setError(assignError instanceof Error ? assignError.message : "User role update failed.");
     } finally {
       setSubmitting(false);
     }
@@ -446,128 +469,211 @@ export function AuthModal({ externalOpenToken = 0 }: { externalOpenToken?: numbe
   return (
     <>
       <div className="responder-controls">
-        <button className="responder-session-badge" onClick={() => openModal("roles")} aria-label="Switch responder or manage responder roles">
-          <span className="responder-avatar">{session?.username.slice(0, 2).toUpperCase() || "—"}</span>
+        <button
+          className="responder-session-badge"
+          onClick={() => session ? openManagementModal() : openAuthModal("signin")}
+          aria-label={session ? "Open account management" : "Sign in or register"}
+        >
+          <span className="responder-avatar">
+            {session?.avatarDataUrl ? <img src={session.avatarDataUrl} alt="" /> : session?.username.slice(0, 2).toUpperCase() || "—"}
+          </span>
           <span className="responder-session-copy">
-            <strong>{hydrated ? session?.username ?? "Responder not signed in" : "Loading responder..."}</strong>
-            <small>{session ? "Active responder" : "No active responder"}</small>
+            <strong>{hydrated ? session?.username ?? "Account not signed in" : "Loading account..."}</strong>
+            <small>{session ? "Active account" : "No account signed in"}</small>
           </span>
           {session && <span className="responder-role-chip">{compactRole(session.role)}</span>}
         </button>
         {session?.role === "Admin" && (
-          <button className="responder-admin-trigger" onClick={() => openModal("roles")}>
+          <button className="responder-admin-trigger" onClick={openManagementModal}>
             Admin: Manage Roles / Invite Employee
           </button>
         )}
       </div>
       {notice && <p className="auth-success-notice" role="status">{notice}</p>}
 
-      {open && createPortal(
-        <div className="modal-backdrop auth-modal-backdrop" onClick={() => setOpen(false)}>
+      {authOpen && createPortal(
+        <div className="modal-backdrop auth-modal-backdrop" onClick={() => setAuthOpen(false)}>
           <section className="modal-card auth-modal" role="dialog" aria-modal="true" aria-labelledby="auth-modal-title" onClick={(event) => event.stopPropagation()}>
             <div className="modal-heading">
               <div>
-                <span className="auth-kicker">OUT-OF-BAND RESPONSE ACCESS</span>
-                <h2 id="auth-modal-title">
-                  {mode === "roles" ? "Responder roles" : mode === "register" ? "Register incident responder" : "Sign in"}
-                </h2>
-                <p>Manage the responder identity for this workspace.</p>
+                <span className="auth-kicker">OUT-OF-BAND ACCOUNT ACCESS</span>
+                <h2 id="auth-modal-title">{mode === "register" ? "Create an account" : "Sign in"}</h2>
+                <p>Sign in or create an account to continue.</p>
               </div>
-              <button className="icon-button" onClick={() => setOpen(false)} aria-label="Close responder access dialog"><X size={17} /></button>
+              <button className="auth-modal-close" type="button" onClick={() => setAuthOpen(false)}>Close</button>
             </div>
 
-            <div className="auth-mode-tabs" role="tablist" aria-label="Responder access mode">
+            <div className="auth-mode-tabs" role="tablist" aria-label="Account access mode">
               <button className={mode === "signin" ? "active" : ""} role="tab" aria-selected={mode === "signin"} onClick={() => { setMode("signin"); setError(""); }}>Sign In</button>
-              <button className={mode === "register" ? "active" : ""} role="tab" aria-selected={mode === "register"} onClick={() => { setMode("register"); setError(""); }}>Register Incident Responder</button>
+              <button className={mode === "register" ? "active" : ""} role="tab" aria-selected={mode === "register"} onClick={() => { setMode("register"); setError(""); }}>Register</button>
             </div>
 
-            {mode === "roles" ? (
-              <div className="auth-role-management">
-                <div className="auth-session-switcher">
-                  <label htmlFor="saved-responder-session">Switch active responder</label>
-                  <div>
-                    <select
-                      id="saved-responder-session"
-                      className="bg-zinc-900 text-zinc-100 border border-zinc-700"
-                      value={sessionToSwitch}
-                      onChange={(event) => setSessionToSwitch(event.target.value)}
-                      style={{ backgroundColor: "#18181b", color: "#f4f4f5", borderColor: "#3f3f46" }}
-                    >
-                      <option className="bg-zinc-900 text-zinc-100" value="">Select a saved responder</option>
-                      {savedSessions.map((saved) => (
-                        <option className="bg-zinc-900 text-zinc-100" key={saved.username} value={saved.username}>
-                          {saved.username} · {compactRole(saved.role)}{saved.username === session?.username ? " (active)" : ""}
-                        </option>
-                      ))}
-                    </select>
-                    <button className="button button-secondary" type="button" onClick={changeResponderSession} disabled={!sessionToSwitch}>
-                      Switch
-                    </button>
-                  </div>
-                  <small>Only sessions previously registered on this device can be switched to.</small>
-                </div>
-                {session?.role === "Admin" ? (
-                  <>
-                    <form className="auth-role-form" onSubmit={assignRole}>
-                      <label>
-                        Responder account
-                        <select value={targetIdentity} onChange={(event) => setTargetIdentity(event.target.value)} required>
-                          <option value="">Select a registered account</option>
-                          {users.map((user) => (
-                            <option key={user.identity.toHexString()} value={user.identity.toHexString()}>
-                              {user.username} · {displayRole(user.role)}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <label>
-                        Assign role
-                        <select value={newRole} onChange={(event) => setNewRole(event.target.value as AssignableRole)}>
-                          {responderRoles.map((responderRole) => <option key={responderRole}>{responderRole}</option>)}
-                        </select>
-                      </label>
-                      <button className="button button-primary" type="submit" disabled={submitting || !connection}>
-                        {submitting ? "Updating role..." : "Assign Role"}
-                      </button>
-                    </form>
-                    <p className="auth-demo-notice">Role changes and employee invitations are validated by Admin-only SpacetimeDB reducers.</p>
-                    <form className="auth-role-form" onSubmit={inviteEmployee}>
-                      <label>
-                        Invite Employee
-                        <input
-                          value={inviteUsername}
-                          onChange={(event) => setInviteUsername(event.target.value)}
-                          autoComplete="off"
-                          minLength={3}
-                          maxLength={64}
-                          pattern="[A-Za-z0-9._-]+"
-                          placeholder="Existing username"
-                          required
-                        />
-                      </label>
-                      <button className="button button-primary" type="submit" disabled={inviting || !connection}>
-                        {inviting ? "Creating invitation..." : "Invite Employee"}
-                      </button>
-                    </form>
-                  </>
-                ) : (
-                  <p className="auth-demo-notice">Only Admin users can invite members or assign roles.</p>
+            <form className="modal-form auth-form" onSubmit={submitSession}>
+                <label>
+                  Username
+                  <input value={username} onChange={(event) => setUsername(event.target.value)} autoComplete="username" required />
+                </label>
+                {mode === "register" && (
+                  <label>
+                    Work email
+                    <input
+                      type="email"
+                      value={email}
+                      onChange={(event) => setEmail(event.target.value)}
+                      autoComplete="email"
+                      placeholder="name@company.com"
+                      required
+                    />
+                  </label>
                 )}
-                <div className="auth-active-roster">
-                  <span className="summary-label">ACME CORPORATION - ACTIVE RESPONDERS</span>
-                  {session?.role === "Admin" && users.length > 0 ? (
-                    <div className="auth-role-list">
-                      {users.map((user) => (
-                        <article key={user.identity.toHexString()}>
-                          <strong>{user.username}</strong>
-                          <p>{displayRole(user.role)} · Active account</p>
-                        </article>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="auth-demo-notice">{session?.role === "Admin" ? "No registered responders are available yet." : "Responder roster is available to Admins."}</p>
-                  )}
+                <label>
+                  Password
+                  <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete={mode === "register" ? "new-password" : "current-password"} required />
+                </label>
+                {mode === "register" && (
+                  <label>
+                    Account role
+                    <select value={role} onChange={(event) => setRole(event.target.value as ResponderRole)}>
+                      {responderRoles.map((responderRole) => <option key={responderRole}>{responderRole}</option>)}
+                    </select>
+                  </label>
+                )}
+                {mode === "register" && (
+                  <label>
+                    Profile photo <span>(optional)</span>
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      onChange={async (event) => {
+                        const input = event.currentTarget;
+                        const file = input.files?.[0];
+                        if (!file) return;
+                        try {
+                          setAccountPhoto(await readImageFile(file));
+                          setError("");
+                        } catch (uploadError) {
+                          setAccountPhoto("");
+                          setError(uploadError instanceof Error ? uploadError.message : "The selected image could not be read.");
+                          input.value = "";
+                        }
+                      }}
+                    />
+                    {accountPhoto && (
+                      <span className="auth-photo-preview">
+                        <img src={accountPhoto} alt="Profile photo preview" />
+                        <button className="button button-secondary" type="button" onClick={() => setAccountPhoto("")}>Remove photo</button>
+                      </span>
+                    )}
+                  </label>
+                )}
+                <p className="auth-demo-notice">{mode === "register" ? "Use your work email. Choose Admin or Employee; this demo only requires your username, work email, and password." : "Your password is hashed with SHA-256 and verified by SpacetimeDB."}</p>
+                {(error || connectionError) && <p className="auth-error" role="alert">{error || connectionError}</p>}
+                <div className="modal-actions">
+                  <button className="button button-primary" type="submit" disabled={submitting || (mode === "signin" && !connection)}>
+                    {submitting ? mode === "register" ? "Registering..." : "Signing in..." : mode === "register" ? "Create Account" : "Sign In"}
+                  </button>
                 </div>
+            </form>
+          </section>
+        </div>,
+        document.body,
+      )}
+
+      {managementOpen && createPortal(
+        <div className="modal-backdrop auth-modal-backdrop" onClick={() => setManagementOpen(false)}>
+          <section className="modal-card auth-modal" role="dialog" aria-modal="true" aria-labelledby="management-modal-title" onClick={(event) => event.stopPropagation()}>
+            <div className="modal-heading">
+              <div>
+                <span className="auth-kicker">{session?.role === "Admin" ? "ADMINISTRATION" : "ACCOUNT"}</span>
+                <h2 id="management-modal-title">{session?.role === "Admin" ? "Admin management" : "Account management"}</h2>
+                <p>{session ? `Signed in as ${session.username}.` : "Manage your active account."}</p>
+              </div>
+              <button className="auth-modal-close" type="button" onClick={() => setManagementOpen(false)}>Close</button>
+            </div>
+
+            <div className="auth-role-management">
+              <div className="auth-session-switcher">
+                <label htmlFor="saved-responder-session">Switch active account</label>
+                <div>
+                  <select
+                    id="saved-responder-session"
+                    value={sessionToSwitch}
+                    onChange={(event) => setSessionToSwitch(event.target.value)}
+                  >
+                    <option value="">Select a saved account</option>
+                    {savedSessions.map((saved) => (
+                      <option key={saved.username} value={saved.username}>
+                        {saved.username} · {compactRole(saved.role)}{saved.username === session?.username ? " (active)" : ""}
+                      </option>
+                    ))}
+                  </select>
+                  <button className="button button-secondary" type="button" onClick={changeResponderSession} disabled={!sessionToSwitch}>
+                    Switch
+                  </button>
+                </div>
+                <small>Only sessions previously registered on this device can be switched to.</small>
+              </div>
+
+              {session?.role === "Admin" ? (
+                <>
+                  <form className="auth-role-form" onSubmit={assignRole}>
+                    <label>
+                      User account
+                      <select value={targetIdentity} onChange={(event) => setTargetIdentity(event.target.value)} required>
+                        <option value="">Select a registered account</option>
+                        {users.map((user) => (
+                          <option key={user.identity.toHexString()} value={user.identity.toHexString()}>
+                            {user.username} · {displayRole(user.role)}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>
+                      Assign role
+                      <select value={newRole} onChange={(event) => setNewRole(event.target.value as AssignableRole)}>
+                        {responderRoles.map((responderRole) => <option key={responderRole}>{responderRole}</option>)}
+                      </select>
+                    </label>
+                    <button className="button button-primary" type="submit" disabled={submitting || !connection}>
+                      {submitting ? "Updating role..." : "Assign Role"}
+                    </button>
+                  </form>
+                  <p className="auth-demo-notice">Role changes and employee invitations are validated by Admin-only SpacetimeDB reducers.</p>
+                  <form className="auth-role-form" onSubmit={inviteEmployee}>
+                    <label>
+                      Invite Employee
+                      <input
+                        value={inviteUsername}
+                        onChange={(event) => setInviteUsername(event.target.value)}
+                        autoComplete="off"
+                        minLength={3}
+                        maxLength={64}
+                        pattern="[A-Za-z0-9._-]+"
+                        placeholder="Existing username"
+                        required
+                      />
+                    </label>
+                    <button className="button button-primary" type="submit" disabled={inviting || !connection}>
+                      {inviting ? "Creating invitation..." : "Invite Employee"}
+                    </button>
+                  </form>
+                  <div className="auth-active-roster">
+                    <span className="summary-label">USER ACCOUNTS</span>
+                    {users.length > 0 ? (
+                      <div className="auth-role-list">
+                        {users.map((user) => (
+                          <article key={user.identity.toHexString()}>
+                            <strong>{user.username}</strong>
+                            <p>{displayRole(user.role)} · Active account</p>
+                          </article>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="auth-demo-notice">No registered user accounts are available yet.</p>
+                    )}
+                  </div>
+                </>
+              ) : (
                 <div className="auth-role-list">
                   {responderRoles.map((responderRole) => (
                     <article key={responderRole}>
@@ -576,35 +682,15 @@ export function AuthModal({ externalOpenToken = 0 }: { externalOpenToken?: numbe
                     </article>
                   ))}
                 </div>
-                <button className="button button-primary" onClick={() => { setMode("register"); setError(""); }}>Register Responder</button>
+              )}
+              {(error || connectionError) && <p className="auth-error" role="alert">{error || connectionError}</p>}
+              <div className="modal-actions">
+                <button className="button button-secondary" type="button" onClick={() => { setManagementOpen(false); openAuthModal("signin"); }}>
+                  Sign In / Register
+                </button>
+                {session && <button className="button button-secondary" type="button" onClick={signOut}>Sign out</button>}
               </div>
-            ) : (
-              <form className="modal-form auth-form" onSubmit={submitSession}>
-                <label>
-                  Username
-                  <input value={username} onChange={(event) => setUsername(event.target.value)} autoComplete="username" required />
-                </label>
-                <label>
-                  Password
-                  <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete={mode === "register" ? "new-password" : "current-password"} required />
-                </label>
-                {mode === "register" && (
-                  <label>
-                    Responder role
-                    <input value="Employee" readOnly />
-                  </label>
-                )}
-                <p className="auth-demo-notice">{mode === "register" ? "Employee registration requires an Admin invitation. Only the first responder account can claim Admin access." : "Your password is hashed with SHA-256 and verified by SpacetimeDB."}</p>
-                {(error || connectionError) && <p className="auth-error" role="alert">{error || connectionError}</p>}
-                <div className="modal-actions">
-                  {session && <button className="button button-secondary" type="button" onClick={signOut}>Sign out</button>}
-                  <button className="button button-primary" type="submit" disabled={submitting || (mode === "signin" && !connection)}>
-                    {submitting ? mode === "register" ? "Registering..." : "Signing in..." : mode === "register" ? "Register Responder" : "Sign In"}
-                  </button>
-                </div>
-              </form>
-            )}
-            {mode === "roles" && (error || connectionError) && <p className="auth-error" role="alert">{error || connectionError}</p>}
+            </div>
           </section>
         </div>,
         document.body,

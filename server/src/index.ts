@@ -296,12 +296,17 @@ export const createUser = spacetime.reducer(
 );
 
 export const signUp = spacetime.reducer(
-  { username: t.string(), passwordHash: t.string(), role: t.string() },
+  { username: t.string(), email: t.string(), passwordHash: t.string(), role: t.string() },
   (ctx: any, args: any) => {
     const username = args.username.trim();
-    const requestedRole = canonicalRole(args.role);
+    const email = args.email.trim().toLowerCase();
+    const role = args.role as Role;
     if (!username) throw new SenderError('Username is required');
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) {
+      throw new SenderError('Enter a valid work email address');
+    }
     if (!args.passwordHash) throw new SenderError('Password hash is required');
+    if (!['Admin', 'Employee'].includes(role)) throw new SenderError('Choose Admin or Employee');
     const currentUser = ctx.db.user.identity.find(ctx.sender);
     if (currentUser && !currentUser.username.startsWith('soc-')) {
       throw new SenderError('User already registered');
@@ -311,21 +316,10 @@ export const signUp = spacetime.reducer(
         throw new SenderError('Username already exists');
       }
     }
-    let invitation: any = null;
-    const role: Role = requestedRole;
-    if (role === 'Admin') {
-      if (Array.from(ctx.db.user.iter()).some((row: any) => canonicalRole(row.role) === 'Admin')) {
-        throw new SenderError('An administrator account already exists');
-      }
-    } else {
-      invitation = Array.from(ctx.db.responderInvitation.iter())
-        .find((row: any) => row.username.toLowerCase() === username.toLowerCase());
-      if (!invitation) throw new SenderError('An administrator invitation is required to register this username');
-    }
     const newUser = {
       identity: ctx.sender,
       name: username,
-      email: defaultEmail(username),
+      email,
       username,
       passwordHash: args.passwordHash,
       role,
@@ -337,7 +331,6 @@ export const signUp = spacetime.reducer(
     } else {
       ctx.db.user.insert(newUser);
     }
-    if (invitation) ctx.db.responderInvitation.id.delete(invitation.id);
     appendAudit(ctx, `USER_REGISTERED: [${username}] as [${role}]`, null);
   },
 );

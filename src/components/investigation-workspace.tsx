@@ -732,7 +732,7 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
   }
 
   if (!sessionLoaded) {
-    return <div className="incident-hub-empty"><strong>Loading responder access...</strong></div>;
+    return <div className="incident-hub-empty"><strong>Loading account access...</strong></div>;
   }
   if (isEmployee && !employeeAccessVerified) {
     return <div className="incident-hub-empty"><strong>Verifying incident assignment...</strong></div>;
