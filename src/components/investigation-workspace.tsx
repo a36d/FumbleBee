@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Activity, AlertTriangle, ArrowLeft, ArrowUpRight, Check, CheckCircle2, Clock3, FileClock, Fingerprint, LoaderCircle, LockKeyhole, Plus, Sparkles, X } from "lucide-react";
+import { Activity, AlertTriangle, ArrowLeft, ArrowUpRight, Check, CheckCircle2, Clock3, FileClock, Fingerprint, LoaderCircle, LockKeyhole, Plus, RefreshCw, Sparkles, X } from "lucide-react";
 import Link from "next/link";
 import type { Node } from "@xyflow/react";
 import { createSentinelGraphClient, formatAttackGraph, type AiAnalysisInput } from "@/sdk/src/index";
@@ -28,6 +28,8 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
   const [noteText, setNoteText] = useState("");
   const [analysisRunning, setAnalysisRunning] = useState(false);
   const [analysisError, setAnalysisError] = useState("");
+  const [resetRunning, setResetRunning] = useState(false);
+  const [resetNotice, setResetNotice] = useState("");
   const [analysisResult, setAnalysisResult] = useState<AiAnalysisInput | null>(null);
   const [highRiskOnly, setHighRiskOnly] = useState(false);
   const [selectedAsset, setSelectedAsset] = useState<FrontendAsset | null>(null);
@@ -40,6 +42,45 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
   const [auditOpen, setAuditOpen] = useState(false);
   const [checked, setChecked] = useState<string[]>([]);
   const [sentinelClient, setSentinelClient] = useState<ReturnType<typeof createSentinelGraphClient> | null>(null);
+
+  async function resetDemoState() {
+    if (resetRunning || !window.confirm("Reset Incident #1 to its pre-analysis demo state?")) return;
+    setResetRunning(true);
+    setAnalysisError("");
+    setResetNotice("");
+    try {
+      const response = await fetch("/api/reset", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      const result = await response.json() as { success?: boolean; error?: string; message?: string };
+      if (!response.ok || !result.success) {
+        throw new Error(result.error ?? "Demo state reset failed.");
+      }
+
+      setGraph({ nodes: [], edges: [] });
+      setAnalysisResult(null);
+      setSelectedAsset(null);
+      setHighRiskOnly(false);
+      setChecked([]);
+      setLiveIncident((current) => ({
+        ...(current ?? fallbackIncident),
+        severity: "High",
+        riskScore: 0,
+        threatClassification: "Pending Analysis",
+        blastRadius: 0,
+        impactSummary: "",
+        recommendations: [],
+        confidence: 0,
+      }));
+      setResetNotice(result.message ?? "Incident state reset.");
+      window.setTimeout(() => setResetNotice(""), 3500);
+    } catch (error) {
+      setAnalysisError(error instanceof Error ? error.message : "Demo state reset failed.");
+    } finally {
+      setResetRunning(false);
+    }
+  }
 
   useEffect(() => {
     let connection: DbConnection | null = null;
@@ -319,9 +360,10 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
     <>
       <div className="investigation-heading">
         <div><Link href="/" className="back-link"><ArrowLeft size={14} /> All investigations</Link><div className="investigation-title-row"><h1>{incident.title}</h1><SeverityBadge severity={findings.severity} /></div><div className="investigation-meta"><span>{incident.id}</span><span className="meta-dot">·</span><span>Subject: <strong>{incident.subjectName}</strong></span><span className="meta-dot">·</span><StatusBadge status={incident.status} /></div></div>
-        <div className="heading-actions"><button className="button button-secondary" onClick={() => setAuditOpen(true)}><Fingerprint size={16} /> Audit trail</button><button className="button button-primary" onClick={runAnalysis} disabled={analysisRunning}>{analysisRunning ? <LoaderCircle className="spin" size={16} /> : <Sparkles size={16} />}{analysisRunning ? "Analyzing..." : "Run AI analysis"}</button></div>
+        <div className="heading-actions"><button className="button button-secondary" onClick={() => setAuditOpen(true)}><Fingerprint size={16} /> Audit trail</button><button className="button button-reset" onClick={resetDemoState} disabled={resetRunning || analysisRunning}>{resetRunning ? <LoaderCircle className="spin" size={15} /> : <RefreshCw size={14} />}{resetRunning ? "Resetting..." : "Reset Demo"}</button><button className="button button-primary" onClick={runAnalysis} disabled={analysisRunning || resetRunning}>{analysisRunning ? <LoaderCircle className="spin" size={16} /> : <Sparkles size={16} />}{analysisRunning ? "Analyzing..." : "Run AI analysis"}</button></div>
       </div>
       {analysisError && <p className="analysis-error" role="alert">{analysisError}</p>}
+      {resetNotice && <p className="reset-notice" role="status"><CheckCircle2 size={14} />{resetNotice}</p>}
 
       <div className="investigation-summary panel">
         <div className="summary-score"><div className="score-gauge" style={{ "--score": `${findings.riskScore}%` } as React.CSSProperties}><span>{findings.riskScore}</span><small>RISK</small></div><div><span className="summary-label">RISK SCORE</span><strong className="summary-score-text">{findings.severity} risk detected</strong><small>Updated {analysisResult ? "just now" : "12 minutes ago"}</small></div></div>

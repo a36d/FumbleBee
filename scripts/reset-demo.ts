@@ -1,6 +1,7 @@
 import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const HOST = 'http://127.0.0.1:3000';
 const DATABASE = 'sentinelgraph';
@@ -20,10 +21,8 @@ function resolveSpacetimeCli(): string {
   throw new Error('SpacetimeDB CLI not found. Install it or set SPACETIME_CLI.');
 }
 
-const cli = resolveSpacetimeCli();
-
 function runCli(args: string[]): string {
-  const result = spawnSync(cli, args, {
+  const result = spawnSync(resolveSpacetimeCli(), args, {
     cwd: process.cwd(),
     encoding: 'utf8',
     env: process.env,
@@ -53,9 +52,9 @@ function runSql(query: string): unknown[][] {
   return payload[0]?.rows ?? [];
 }
 
-function resetDemo() {
+export function resetDemo() {
   runSql(
-    "UPDATE Incident SET risk_score = 0, status = 'Investigating', classification = 'Pending Analysis', summary = '', trigger_details = '', blast_radius = 0, confidence = 0, impact_summary = '', recommendations = '[]' WHERE id = 1",
+    "UPDATE Incident SET risk_score = 0, status = 'Investigating', severity = 'High', classification = 'Pending Analysis', summary = '', trigger_details = '', blast_radius = 0, confidence = 0, impact_summary = '', recommendations = '[]' WHERE id = 1",
   );
   runSql('DELETE FROM Asset WHERE incident_id = 1');
   runSql('DELETE FROM Relationship WHERE incident_id = 1');
@@ -76,4 +75,6 @@ function resetDemo() {
   console.log('✅ Incident #1 reset to clean state. Ready for demo run.');
 }
 
-resetDemo();
+if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
+  resetDemo();
+}
