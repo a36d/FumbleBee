@@ -30,6 +30,9 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
   const [analysisRunning, setAnalysisRunning] = useState(false);
   const [analysisError, setAnalysisError] = useState("");
   const [assetActionPending, setAssetActionPending] = useState(false);
+  const [exportFormat, setExportFormat] = useState<"markdown" | "json">("markdown");
+  const [exportRunning, setExportRunning] = useState(false);
+  const [exportError, setExportError] = useState("");
   const [resetRunning, setResetRunning] = useState(false);
   const [resetNotice, setResetNotice] = useState("");
   const [analysisResult, setAnalysisResult] = useState<AiAnalysisInput | null>(null);
@@ -55,6 +58,34 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
         ? { ...node, data: { ...node.data, asset: { ...asset, scopeStatus } } }
         : node;
     });
+  }
+
+  async function exportForensicReport() {
+    if (exportRunning) return;
+    setExportRunning(true);
+    setExportError("");
+    try {
+      const format = exportFormat === "json" ? "json" : "markdown";
+      const response = await fetch(`/api/incidents/${encodeURIComponent(incidentId)}/export?format=${format}`);
+      if (!response.ok) {
+        const result = await response.json() as { error?: string };
+        throw new Error(result.error ?? "Forensic report export failed.");
+      }
+
+      const report = await response.blob();
+      const objectUrl = URL.createObjectURL(report);
+      const link = document.createElement("a");
+      link.href = objectUrl;
+      link.download = `incident-${incidentId}-forensic-report.${format === "json" ? "json" : "md"}`;
+      document.body.append(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+    } catch (error) {
+      setExportError(error instanceof Error ? error.message : "Forensic report export failed.");
+    } finally {
+      setExportRunning(false);
+    }
   }
 
   async function resetDemoState() {
@@ -439,9 +470,10 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
             <div className="investigation-meta"><span>Subject: <strong>{incident.subjectName}</strong></span><StatusBadge status={incident.status} /><SeverityBadge severity={findings.severity} /></div>
           </div>
         </div>
-        <div className="heading-actions"><button className="button button-secondary" onClick={() => setAuditOpen(true)}>Audit trail</button><button className="button button-reset" onClick={resetDemoState} disabled={resetRunning || analysisRunning}>{resetRunning && <LoaderCircle className="spin" size={15} />}{resetRunning ? "Resetting..." : "Reset Demo"}</button><button className="button button-primary" onClick={runAnalysis} disabled={analysisRunning || resetRunning}>{analysisRunning && <LoaderCircle className="spin" size={16} />}{analysisRunning ? "Analyzing..." : "Run AI analysis"}</button></div>
+        <div className="heading-actions"><button className="button button-secondary" onClick={() => setAuditOpen(true)}>Audit trail</button><button className="button button-reset" onClick={resetDemoState} disabled={resetRunning || analysisRunning}>{resetRunning && <LoaderCircle className="spin" size={15} />}{resetRunning ? "Resetting..." : "Reset Demo"}</button><div className="export-report-control"><select aria-label="Forensic report format" value={exportFormat} onChange={(event) => setExportFormat(event.target.value as "markdown" | "json")} disabled={exportRunning}><option value="markdown">Markdown (.md)</option><option value="json">Raw JSON (.json)</option></select><button className="button button-primary" onClick={() => void exportForensicReport()} disabled={exportRunning}>{exportRunning ? "Preparing report..." : "Export Forensic Report"}</button></div><button className="button button-primary" onClick={runAnalysis} disabled={analysisRunning || resetRunning}>{analysisRunning && <LoaderCircle className="spin" size={16} />}{analysisRunning ? "Analyzing..." : "Run AI analysis"}</button></div>
       </div>
       {analysisError && <p className="analysis-error" role="alert">{analysisError}</p>}
+      {exportError && <p className="analysis-error" role="alert">{exportError}</p>}
       {resetNotice && <p className="reset-notice" role="status">{resetNotice}</p>}
 
       <div className="investigation-summary panel">

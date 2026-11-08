@@ -22,6 +22,10 @@ interface ResponderSession {
   role: ResponderRole;
 }
 
+interface SavedResponderSession extends ResponderSession {
+  token: string;
+}
+
 type ResponderAccount = Pick<User, "identity" | "username" | "role">;
 
 const roleDescriptions: Record<ResponderRole, string> = {
@@ -55,6 +59,31 @@ function displayRole(role: string): string {
   }
 }
 
+function compactRole(role: string): string {
+  switch (role) {
+    case "SOC Investigator": return "Investigator";
+    case "Incident Commander": return "Commander";
+    case "Forensics Lead": return "Forensics Lead";
+    case "Legal Counsel": return "Legal Counsel";
+    case "Administrator":
+    case "admin": return "Administrator";
+    default: return role;
+  }
+}
+
+function isSavedResponderSession(value: unknown): value is SavedResponderSession {
+  return Boolean(
+    value &&
+    typeof value === "object" &&
+    "username" in value &&
+    typeof value.username === "string" &&
+    "role" in value &&
+    isResponderRole(value.role) &&
+    "token" in value &&
+    typeof value.token === "string",
+  );
+}
+
 async function hashPassphrase(passphrase: string): Promise<string> {
   if (!globalThis.crypto?.subtle) {
     throw new Error("Secure passphrase hashing is unavailable in this browser.");
@@ -64,7 +93,7 @@ async function hashPassphrase(passphrase: string): Promise<string> {
 }
 
 export function AuthModal() {
-  const { connection, connectionError, saveSession } = useSpacetimeConnection();
+  const { connection, connectionError, saveSession, switchSession } = useSpacetimeConnection();
   const [session, setSession] = useState<ResponderSession | null>(null);
   const [hydrated, setHydrated] = useState(false);
   const [mode, setMode] = useState<AuthMode>("signin");
@@ -73,6 +102,8 @@ export function AuthModal() {
   const [passphrase, setPassphrase] = useState("");
   const [role, setRole] = useState<ResponderRole>("SOC Investigator");
   const [users, setUsers] = useState<ResponderAccount[]>([]);
+  const [savedSessions, setSavedSessions] = useState<SavedResponderSession[]>([]);
+  const [sessionToSwitch, setSessionToSwitch] = useState("");
   const [targetIdentity, setTargetIdentity] = useState("");
   const [newRole, setNewRole] = useState<AssignableRole>("SOC Investigator");
   const [submitting, setSubmitting] = useState(false);
@@ -93,6 +124,10 @@ export function AuthModal() {
         ) {
           setSession({ username: parsed.username, role: parsed.role });
         }
+      }
+      const savedSessionsValue: unknown = JSON.parse(localStorage.getItem("fumblebee_responder_sessions") ?? "[]");
+      if (Array.isArray(savedSessionsValue)) {
+        setSavedSessions(savedSessionsValue.filter(isSavedResponderSession));
       }
     } catch {
       setError("Saved responder session could not be read.");
@@ -170,6 +205,8 @@ export function AuthModal() {
       const nextSession = { username: cleanUsername, role };
       saveSession(nextSession);
       setSession(nextSession);
+      const savedSessionsValue: unknown = JSON.parse(localStorage.getItem("fumblebee_responder_sessions") ?? "[]");
+      setSavedSessions(Array.isArray(savedSessionsValue) ? savedSessionsValue.filter(isSavedResponderSession) : []);
       setOpen(false);
       setUsername("");
       setPassphrase("");
@@ -178,6 +215,19 @@ export function AuthModal() {
       setError(submitError instanceof Error ? submitError.message : "Responder registration failed.");
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  function changeResponderSession() {
+    const nextSession = savedSessions.find((saved) => saved.username === sessionToSwitch);
+    if (!nextSession) {
+      setError("Choose a responder session saved on this device.");
+      return;
+    }
+    try {
+      switchSession(nextSession);
+    } catch (switchError) {
+      setError(switchError instanceof Error ? switchError.message : "Could not switch responder session.");
     }
   }
 
@@ -223,13 +273,13 @@ export function AuthModal() {
   return (
     <>
       <div className="responder-controls">
-        <button className="responder-session-badge" onClick={() => openModal("signin")} aria-label="Manage responder session">
+        <button className="responder-session-badge" onClick={() => openModal("roles")} aria-label="Switch responder or manage responder roles">
           <span className="responder-avatar">{session?.username.slice(0, 2).toUpperCase() || "—"}</span>
           <span className="responder-session-copy">
             <strong>{hydrated ? session?.username ?? "Responder not signed in" : "Loading responder..."}</strong>
-            <small>{session?.role ?? "Local demo session"}</small>
+            <small>{session ? "Active responder" : "No active responder"}</small>
           </span>
-          {session && <span className="responder-role-chip">{session.role}</span>}
+          {session && <span className="responder-role-chip">{compactRole(session.role)}</span>}
         </button>
         <button className="responder-admin-trigger" onClick={() => openModal("roles")}>
           Admin: Manage Roles / Add User
@@ -259,6 +309,23 @@ export function AuthModal() {
 
             {mode === "roles" ? (
               <div className="auth-role-management">
+                <div className="auth-session-switcher">
+                  <label htmlFor="saved-responder-session">Switch active responder</label>
+                  <div>
+                    <select id="saved-responder-session" value={sessionToSwitch} onChange={(event) => setSessionToSwitch(event.target.value)}>
+                      <option value="">Select a saved responder</option>
+                      {savedSessions.map((saved) => (
+                        <option key={saved.username} value={saved.username}>
+                          {saved.username} · {compactRole(saved.role)}{saved.username === session?.username ? " (active)" : ""}
+                        </option>
+                      ))}
+                    </select>
+                    <button className="button button-secondary" type="button" onClick={changeResponderSession} disabled={!sessionToSwitch}>
+                      Switch
+                    </button>
+                  </div>
+                  <small>Only sessions previously registered on this device can be switched to.</small>
+                </div>
                 <form className="auth-role-form" onSubmit={assignRole}>
                   <label>
                     Responder account
