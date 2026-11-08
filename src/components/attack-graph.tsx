@@ -2,24 +2,23 @@
 
 import { memo, useMemo } from "react";
 import { Handle, Position, ReactFlow, Background, Controls, MiniMap, type Edge, type Node, type NodeMouseHandler, type NodeProps } from "@xyflow/react";
-import { Database, FolderOpen, UserRound } from "lucide-react";
 import type { Asset } from "@/lib/types";
 
 const typeMeta = {
-  identity: { Icon: UserRound, label: "USER / IDENTITY", color: "asset-identity" },
-  share: { Icon: FolderOpen, label: "RESOURCE / SHARE", color: "asset-resource" },
-  resource: { Icon: FolderOpen, label: "RESOURCE / SHARE", color: "asset-resource" },
-  database: { Icon: Database, label: "DATASTORE / DB", color: "asset-database" },
+  identity: { label: "USER / IDENTITY", color: "asset-identity" },
+  share: { label: "RESOURCE / SHARE", color: "asset-resource" },
+  resource: { label: "RESOURCE / SHARE", color: "asset-resource" },
+  database: { label: "DATASTORE / DB", color: "asset-database" },
 };
 
 function AssetNode({ data }: NodeProps) {
   const asset = data.asset as Asset;
-  const { Icon, label, color } = typeMeta[asset.type];
+  const { label, color } = typeMeta[asset.type];
   const risk = asset.riskLabel.toLowerCase();
   return (
     <div className={`asset-node ${color} node-risk-${risk}`}>
       <Handle type="target" position={Position.Top} />
-      <div className="asset-node-top"><span className="asset-icon"><Icon size={15} /></span><span>{label}</span><i /></div>
+      <div className="asset-node-top"><span>{label}</span><i /></div>
       <strong>{asset.name}</strong><small>{asset.description}</small>
       <div className="asset-node-risk">{asset.riskLabel}</div>
       <Handle type="source" position={Position.Bottom} />

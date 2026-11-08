@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Activity, Check, CheckCircle2, Clipboard, Clock3, Fingerprint, ShieldCheck } from "lucide-react";
+import { Check, Clipboard } from "lucide-react";
 
 export interface AuditFeedActivity {
   id: string | bigint;
@@ -85,7 +85,6 @@ export function AuditFeedPanel({ activities, auditEntries }: AuditFeedPanelProps
     <section className="audit-feed-panel" aria-label="Activity and audit log">
       <header className="audit-feed-header">
         <div className="audit-feed-heading">
-          <span className="audit-feed-icon"><Fingerprint size={17} /></span>
           <div>
             <h2>Activity &amp; audit</h2>
             <p>Investigation events and immutable records</p>
@@ -93,7 +92,6 @@ export function AuditFeedPanel({ activities, auditEntries }: AuditFeedPanelProps
         </div>
         {activeTab === "audit" && auditEntries.length > 0 && (
           <span className={`audit-integrity-badge ${integrityVerified ? "" : "audit-integrity-warning"}`}>
-            {integrityVerified ? <ShieldCheck size={13} /> : <Clock3 size={13} />}
             {integrityVerified ? "Integrity Verified" : "Chain Mismatch"}
           </span>
         )}
@@ -108,7 +106,7 @@ export function AuditFeedPanel({ activities, auditEntries }: AuditFeedPanelProps
           aria-controls="activity-panel"
           onClick={() => setActiveTab("activity")}
         >
-          <Activity size={14} /> Live Activity Feed
+          Live Activity Feed
           <span>{activities.length}</span>
         </button>
         <button
@@ -119,7 +117,7 @@ export function AuditFeedPanel({ activities, auditEntries }: AuditFeedPanelProps
           aria-controls="audit-panel"
           onClick={() => setActiveTab("audit")}
         >
-          <Fingerprint size={14} /> Immutable Audit Log
+          Immutable Audit Log
           <span>SHA-256</span>
         </button>
       </div>
@@ -128,7 +126,7 @@ export function AuditFeedPanel({ activities, auditEntries }: AuditFeedPanelProps
         <div className="audit-feed-content" id="activity-panel" role="tabpanel" aria-labelledby="activity-tab">
           {chronologicalActivities.length ? chronologicalActivities.map((activity) => (
             <article className="audit-activity-item" key={String(activity.id)}>
-              <span className="audit-activity-marker"><Activity size={12} /></span>
+              <span className="audit-activity-marker" aria-hidden="true" />
               <div className="audit-activity-copy">
                 <strong>{activity.action}</strong>
                 <span>by {activity.actorName}</span>
@@ -144,7 +142,7 @@ export function AuditFeedPanel({ activities, auditEntries }: AuditFeedPanelProps
             <article className="audit-log-item" key={String(entry.sequenceId)}>
               <div className="audit-log-topline">
                 <span className="audit-log-sequence">#{String(entry.sequenceId)}</span>
-                <time dateTime={isoTimestamp(entry.timestamp)}><Clock3 size={12} />{formatTimestamp(entry.timestamp)}</time>
+                <time dateTime={isoTimestamp(entry.timestamp)}>{formatTimestamp(entry.timestamp)}</time>
               </div>
               <h3>{entry.action}</h3>
               <div className="audit-hash-row">
@@ -164,7 +162,7 @@ export function AuditFeedPanel({ activities, auditEntries }: AuditFeedPanelProps
             </article>
           )) : <p className="audit-feed-empty">No immutable audit entries are available.</p>}
           {integrityVerified && auditEntries.length > 0 && (
-            <div className="audit-chain-note"><CheckCircle2 size={13} /> Each entry links to the previous record in the chain.</div>
+            <div className="audit-chain-note">Each entry links to the previous record in the chain.</div>
           )}
         </div>
       )}

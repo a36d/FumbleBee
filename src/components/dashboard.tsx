@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { Activity, ArrowDown, ArrowRight, Database, Plus, Search, ShieldAlert, Users, X } from "lucide-react";
+import { ArrowDown, ArrowRight, X } from "lucide-react";
 import { incidents } from "@/lib/mock-data";
 import type { Incident, Severity } from "@/lib/types";
 import { MetricCard } from "@/components/metric-card";
@@ -44,19 +44,19 @@ export function Dashboard() {
     <>
       <div className="page-heading">
         <div><div className="eyebrow"><span className="eyebrow-line" /> MONDAY, NOVEMBER 18, 2024</div><h1>Security overview</h1><p className="page-subtitle">Monitor and investigate insider threat activity across your organization.</p></div>
-        <button className="button button-primary" onClick={() => setDialogOpen(true)}><Plus size={16} /> New investigation</button>
+        <button className="button button-primary" onClick={() => setDialogOpen(true)}>New investigation</button>
       </div>
       <div className="metric-grid">
-        <MetricCard label="Active investigations" value="12" change="+2" changeLabel="vs. last week" icon={Activity} tone="icon-cyan" />
-        <MetricCard label="High-risk users" value="08" change="+1" changeLabel="vs. last week" icon={Users} tone="icon-rose" />
-        <MetricCard label="Assets at risk" value="24" change="+4" changeLabel="vs. last week" icon={Database} tone="icon-amber" />
-        <MetricCard label="Recent alerts" value="36" change="-12%" changeLabel="vs. last week" icon={ShieldAlert} tone="icon-violet" />
+        <MetricCard label="Active investigations" value="12" change="+2" changeLabel="vs. last week" />
+        <MetricCard label="High-risk users" value="08" change="+1" changeLabel="vs. last week" />
+        <MetricCard label="Assets at risk" value="24" change="+4" changeLabel="vs. last week" />
+        <MetricCard label="Recent alerts" value="36" change="-12%" changeLabel="vs. last week" />
       </div>
 
       <section className="panel investigations-panel">
         <div className="panel-heading">
           <div><div className="section-title-row"><h2>Investigations</h2><span className="count-pill">{localIncidents.length}</span></div><p>Review and manage active threat investigations</p></div>
-          <div className="table-actions"><label className="table-search"><Search size={15} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search investigations..." /></label><button className="button button-secondary filter-button">All severity <ArrowDown size={13} /></button></div>
+          <div className="table-actions"><label className="table-search"><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search investigations..." /></label><button className="button button-secondary filter-button">All severity <ArrowDown size={13} /></button></div>
         </div>
         <div className="table-wrap">
           <table>
@@ -75,13 +75,13 @@ export function Dashboard() {
           </table>
           {filtered.length === 0 && <div className="empty-state">No investigations match “{query}”.</div>}
         </div>
-        <div className="table-footer"><span>Showing <strong>{filtered.length}</strong> of <strong>{localIncidents.length}</strong> investigations</span><button>View all investigations <ArrowRight size={14} /></button></div>
+        <div className="table-footer"><span>Showing <strong>{filtered.length}</strong> of <strong>{localIncidents.length}</strong> investigations</span><button>View all investigations</button></div>
       </section>
       <div className="dashboard-bottom">
-        <section className="panel mini-panel"><div className="mini-title"><span className="mini-icon mint"><Activity size={16} /></span><div><h3>Threat activity</h3><span>Last 7 days</span></div></div><div className="activity-chart" aria-label="Threat activity trend chart"><div className="chart-y-labels"><span>40</span><span>20</span><span>0</span></div><div className="chart-plot"><div className="chart-gridline one" /><div className="chart-gridline two" /><div className="chart-bars">{[28, 42, 33, 61, 48, 77, 58, 84, 55, 70, 93, 65, 74, 46, 81, 57, 68, 87].map((height, index) => <i key={index} style={{ height: `${height}%` }} />)}</div><div className="chart-days"><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span></div></div></div></section>
-        <section className="panel mini-panel alert-panel"><div className="mini-title"><span className="mini-icon amber"><ShieldAlert size={16} /></span><div><h3>Needs your attention</h3><span>Priority follow-ups</span></div></div><Link href="/investigations/1" className="attention-item"><span className="attention-dot" /><span><strong>Bulk access and privilege escalation</strong><small>svc-prod-data-pipeline · Investigating</small></span><ArrowRight size={15} /></Link><Link href="/investigations/INC-2024-0846" className="attention-item"><span className="attention-dot attention-amber" /><span><strong>Credential review required</strong><small>Taylor Brooks · 38 min ago</small></span><ArrowRight size={15} /></Link></section>
+        <section className="panel mini-panel"><div className="mini-title"><div><h3>Threat activity</h3><span>Last 7 days</span></div></div><div className="activity-chart" aria-label="Threat activity trend chart"><div className="chart-y-labels"><span>40</span><span>20</span><span>0</span></div><div className="chart-plot"><div className="chart-gridline one" /><div className="chart-gridline two" /><div className="chart-bars">{[28, 42, 33, 61, 48, 77, 58, 84, 55, 70, 93, 65, 74, 46, 81, 57, 68, 87].map((height, index) => <i key={index} style={{ height: `${height}%` }} />)}</div><div className="chart-days"><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span></div></div></div></section>
+        <section className="panel mini-panel alert-panel"><div className="mini-title"><div><h3>Needs your attention</h3><span>Priority follow-ups</span></div></div><Link href="/investigations/1" className="attention-item"><span className="attention-dot" /><span><strong>Bulk access and privilege escalation</strong><small>svc-prod-data-pipeline · Investigating</small></span></Link><Link href="/investigations/INC-2024-0846" className="attention-item"><span className="attention-dot attention-amber" /><span><strong>Credential review required</strong><small>Taylor Brooks · 38 min ago</small></span></Link></section>
       </div>
-      {dialogOpen && <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setDialogOpen(false); }}><section className="modal-card" role="dialog" aria-modal="true" aria-labelledby="new-investigation-title"><div className="modal-heading"><div><span className="modal-icon"><Plus size={18} /></span><h2 id="new-investigation-title">New investigation</h2><p>Create an investigation to start tracking a potential threat.</p></div><button className="icon-button" onClick={() => setDialogOpen(false)} aria-label="Close dialog"><X size={18} /></button></div><form action={createIncident} className="modal-form"><label>Investigation title<input name="title" placeholder="e.g. Unusual data access" required /></label><label>Subject name<input name="subjectName" placeholder="Employee or account name" required /></label><label>Description<textarea name="description" rows={3} placeholder="What happened? Include any relevant context." /></label><label>Trigger details<textarea name="triggerDetails" rows={2} placeholder="Alert source, observed behavior, or detection signal" /></label><div className="modal-actions"><button type="button" className="button button-secondary" onClick={() => setDialogOpen(false)}>Cancel</button><button className="button button-primary" type="submit"><Plus size={15} /> Create investigation</button></div></form></section></div>}
+      {dialogOpen && <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setDialogOpen(false); }}><section className="modal-card" role="dialog" aria-modal="true" aria-labelledby="new-investigation-title"><div className="modal-heading"><div><h2 id="new-investigation-title">New investigation</h2><p>Create an investigation to start tracking a potential threat.</p></div><button className="icon-button" onClick={() => setDialogOpen(false)} aria-label="Close dialog"><X size={18} /></button></div><form action={createIncident} className="modal-form"><label>Investigation title<input name="title" placeholder="e.g. Unusual data access" required /></label><label>Subject name<input name="subjectName" placeholder="Employee or account name" required /></label><label>Description<textarea name="description" rows={3} placeholder="What happened? Include any relevant context." /></label><label>Trigger details<textarea name="triggerDetails" rows={2} placeholder="Alert source, observed behavior, or detection signal" /></label><div className="modal-actions"><button type="button" className="button button-secondary" onClick={() => setDialogOpen(false)}>Cancel</button><button className="button button-primary" type="submit">Create investigation</button></div></form></section></div>}
     </>
   );
 }
