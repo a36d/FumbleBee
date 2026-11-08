@@ -1,6 +1,7 @@
 export type Severity = "Critical" | "High" | "Medium" | "Low";
 export type IncidentStatus = "Investigating" | "In review" | "Contained" | "Closed";
 export type AssetType = "identity" | "share" | "database" | "resource";
+export type AssetScopeStatus = "Exfiltrated" | "Ransomware Encrypted" | "Targeted" | "Quarantined";
 
 export interface Incident {
   id: string;
@@ -25,6 +26,7 @@ export interface Asset {
   type: AssetType;
   description: string;
   riskLabel: string;
+  scopeStatus?: AssetScopeStatus;
 }
 
 export interface Relationship {

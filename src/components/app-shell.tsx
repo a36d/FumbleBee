@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import Image from "next/image";
 import { Bell, ChevronDown, Command } from "lucide-react";
+import { AuthModal } from "@/components/auth-modal";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -32,7 +33,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <div className="main-column">
         <header className="topbar">
           <div className="breadcrumbs"><span>Workspace</span><span className="crumb-slash">/</span><strong>{isInvestigation ? "Investigation" : "Overview"}</strong></div>
-          <div className="topbar-actions"><button className="search-trigger"><span>Search anything...</span><kbd><Command size={11} /> K</kbd></button><button className="icon-button notification-button" aria-label="Notifications"><Bell size={17} /><i /></button><div className="topbar-divider" /><span className="avatar avatar-blue">AM</span></div>
+          <div className="topbar-actions"><button className="search-trigger"><span>Search anything...</span><kbd><Command size={11} /> K</kbd></button><button className="icon-button notification-button" aria-label="Notifications"><Bell size={17} /><i /></button><div className="topbar-divider" /><AuthModal /></div>
         </header>
         <main className="page-content">{children}</main>
       </div>

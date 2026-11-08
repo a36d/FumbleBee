@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { Check, LoaderCircle, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Check, LoaderCircle, ShieldCheck, X } from "lucide-react";
 import Link from "next/link";
 import type { Node } from "@xyflow/react";
 import { createSentinelGraphClient, formatAttackGraph, type AiAnalysisInput } from "@/sdk/src/index";
@@ -12,7 +12,7 @@ import {
 import type { ActivityFeed as LiveActivity, Asset as LiveAsset, AuditLog as LiveAuditLog, Incident as LiveIncident, InvestigationNote as LiveNote, Relationship as LiveRelationship } from "@/generated/spacetimedb/types";
 import { activity as initialActivity, assets, auditLogs, incidents, notes as initialNotes, relationships, relativeTime, seededIncidentAssets, seededIncidentRelationships } from "@/lib/mock-data";
 import { getAttackPathLayout } from "@/lib/graph-layout";
-import type { ActivityFeed, Asset as FrontendAsset, Incident as FrontendIncident, InvestigationNote, Relationship as FrontendRelationship } from "@/lib/types";
+import type { ActivityFeed, Asset as FrontendAsset, AssetScopeStatus, Incident as FrontendIncident, InvestigationNote, Relationship as FrontendRelationship } from "@/lib/types";
 import { AttackGraph } from "@/components/attack-graph";
 import { AuditFeedPanel, type AuditFeedActivity, type AuditFeedEntry } from "@/components/audit-feed-panel";
 import { SeverityBadge, StatusBadge } from "@/components/severity-badge";
@@ -33,6 +33,8 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
   const [analysisResult, setAnalysisResult] = useState<AiAnalysisInput | null>(null);
   const [highRiskOnly, setHighRiskOnly] = useState(false);
   const [selectedAsset, setSelectedAsset] = useState<FrontendAsset | null>(null);
+  const assetScopesRef = useRef<Record<string, AssetScopeStatus>>({});
+  const [assetScopes, setAssetScopes] = useState<Record<string, AssetScopeStatus>>({});
   const [graph, setGraph] = useState(() => {
     const graphAssets = incident.id === "1" ? seededIncidentAssets : assets;
     const graphRelationships = incident.id === "1" ? seededIncidentRelationships : relationships;
@@ -42,6 +44,16 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
   const [auditOpen, setAuditOpen] = useState(false);
   const [checked, setChecked] = useState<string[]>([]);
   const [sentinelClient, setSentinelClient] = useState<ReturnType<typeof createSentinelGraphClient> | null>(null);
+
+  function applyAssetScopes(nodes: Node[]) {
+    return nodes.map((node) => {
+      const asset = node.data.asset as FrontendAsset | undefined;
+      const scopeStatus = asset ? assetScopesRef.current[asset.id] : undefined;
+      return scopeStatus
+        ? { ...node, data: { ...node.data, asset: { ...asset, scopeStatus } } }
+        : node;
+    });
+  }
 
   async function resetDemoState() {
     if (resetRunning || !window.confirm("Reset Incident #1 to its pre-analysis demo state?")) return;
@@ -61,6 +73,8 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
       setGraph({ nodes: [], edges: [] });
       setAnalysisResult(null);
       setSelectedAsset(null);
+      assetScopesRef.current = {};
+      setAssetScopes({});
       setHighRiskOnly(false);
       setChecked([]);
       setLiveIncident((current) => ({
@@ -176,7 +190,7 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
 
       if (liveAssets.length > 0 || liveRelationships.length > 0) {
         const formattedGraph = formatAttackGraph(liveAssets, liveRelationships);
-        setGraph(getAttackPathLayout(formattedGraph.nodes, formattedGraph.edges));
+        setGraph(getAttackPathLayout(applyAssetScopes(formattedGraph.nodes), formattedGraph.edges));
       }
     };
 
@@ -293,7 +307,7 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
         ...analysis,
       });
       const formattedGraph = formatAttackGraph(analysis.assets, analysis.edges);
-      setGraph(getAttackPathLayout(formattedGraph.nodes, formattedGraph.edges));
+      setGraph(getAttackPathLayout(applyAssetScopes(formattedGraph.nodes), formattedGraph.edges));
       setAnalysisResult(analysis);
       const event: ActivityFeed = { id: `analysis-${Date.now()}`, incidentId: incident.id, action: "AI analysis completed", actor: "FumbleBee AI", createdAt: new Date().toISOString(), kind: "analysis" };
       setEvents((current) => [event, ...current]);
@@ -315,6 +329,9 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
   };
 
   const selectedAssetSeverity = getAssetSeverity(selectedAsset?.riskLabel, findings.severity);
+  const selectedAssetScope = selectedAsset
+    ? assetScopes[selectedAsset.id] ?? selectedAsset.scopeStatus ?? "Targeted"
+    : "Targeted";
   const selectedAssetRiskScore = selectedAsset
     ? selectedAsset.type === "identity"
       ? findings.riskScore
@@ -327,6 +344,27 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
   function handleGraphNodeClick(_event: React.MouseEvent, node: Node) {
     const asset = node.data.asset as FrontendAsset | undefined;
     if (asset) setSelectedAsset(asset);
+  }
+
+  function updateAssetScope(scopeStatus: AssetScopeStatus) {
+    if (!selectedAsset) return;
+    const updatedScopes = { ...assetScopesRef.current, [selectedAsset.id]: scopeStatus };
+    assetScopesRef.current = updatedScopes;
+    setAssetScopes(updatedScopes);
+    setSelectedAsset((current) => current ? { ...current, scopeStatus } : current);
+    setGraph((current) => ({
+      ...current,
+      nodes: current.nodes.map((node) => {
+        const asset = node.data.asset as FrontendAsset | undefined;
+        return asset?.id === selectedAsset.id
+          ? { ...node, data: { ...node.data, asset: { ...asset, scopeStatus } } }
+          : node;
+      }),
+    }));
+  }
+
+  function executeContainmentDemo() {
+    updateAssetScope("Quarantined");
   }
 
   const panelActivities = useMemo(() => {
@@ -438,6 +476,29 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
                   <i />{selectedAssetSeverity === "High" || selectedAssetSeverity === "Critical" ? "In potential blast radius" : "Monitored — no direct compromise detected"}
                 </span>
               </section>
+              <section className="asset-detail-section asset-scope-section">
+                <span className="summary-label">DATA COMPROMISE SCOPE</span>
+                <div className={`scope-status-tag ${selectedAssetScope === "Quarantined" ? "scope-quarantined" : `scope-${selectedAssetScope.toLowerCase().replaceAll(" ", "-")}`}`}>
+                  {selectedAssetScope === "Quarantined" && <ShieldCheck size={15} />}
+                  <span>{selectedAssetScope}</span>
+                </div>
+                <label className="scope-select-label" htmlFor="asset-scope">Update asset scope</label>
+                <select id="asset-scope" className="scope-select" value={selectedAssetScope} onChange={(event) => updateAssetScope(event.target.value as AssetScopeStatus)}>
+                  <option>Exfiltrated</option>
+                  <option>Ransomware Encrypted</option>
+                  <option>Targeted</option>
+                  <option>Quarantined</option>
+                </select>
+              </section>
+              <section className="asset-detail-section containment-section">
+                <span className="summary-label">OUT-OF-BAND CONTAINMENT</span>
+                <p>{getContainmentAction(selectedAsset.type)} action for this asset.</p>
+                <pre className="mitigation-terminal"><code>{`containment.request --asset "<selected asset>" --action "${getContainmentMode(selectedAsset.type)}" --mode dry-run`}</code></pre>
+                <small className="containment-disclaimer">Demo simulation only. No infrastructure command is executed.</small>
+                <button className="containment-button" onClick={executeContainmentDemo} disabled={selectedAssetScope === "Quarantined"}>
+                  {selectedAssetScope === "Quarantined" ? <><ShieldCheck size={16} /> Asset Quarantined</> : "Execute Out-of-Band Containment"}
+                </button>
+              </section>
               <section className="asset-detail-section">
                 <span className="summary-label">RELATED RECOMMENDATIONS</span>
                 {selectedAssetRecommendations.length ? (
@@ -479,6 +540,24 @@ function getAssetTypeLabel(type: string): string {
     case "share": return "S3 Bucket / Shared Resource";
     case "database": return "Database";
     default: return "Investigation Asset";
+  }
+}
+
+function getContainmentAction(type: FrontendAsset["type"]): string {
+  switch (type) {
+    case "identity": return "Credential revocation";
+    case "share": return "Shared resource lock";
+    case "database": return "Database access isolation";
+    case "resource": return "Host or resource isolation";
+  }
+}
+
+function getContainmentMode(type: FrontendAsset["type"]): string {
+  switch (type) {
+    case "identity": return "revoke-credentials";
+    case "share": return "lock-resource";
+    case "database": return "isolate-database";
+    case "resource": return "isolate-resource";
   }
 }
 

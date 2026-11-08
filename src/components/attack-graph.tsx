@@ -15,10 +15,11 @@ function AssetNode({ data }: NodeProps) {
   const asset = data.asset as Asset;
   const { label, color } = typeMeta[asset.type];
   const risk = asset.riskLabel.toLowerCase();
+  const quarantined = asset.scopeStatus === "Quarantined";
   return (
-    <div className={`asset-node ${color} node-risk-${risk}`}>
+    <div className={`asset-node ${color} node-risk-${risk} ${quarantined ? "node-quarantined" : ""}`}>
       <Handle type="target" position={Position.Top} />
-      <div className="asset-node-top"><span>{label}</span><i /></div>
+      <div className="asset-node-top"><span>{label}</span>{quarantined ? <span className="node-quarantine-label">QUARANTINED</span> : <i />}</div>
       <strong>{asset.name}</strong><small>{asset.description}</small>
       <div className="asset-node-risk">{asset.riskLabel}</div>
       <Handle type="source" position={Position.Bottom} />
