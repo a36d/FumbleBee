@@ -214,6 +214,11 @@ tbody tr:hover { background: rgba(255,255,255,.015); }
 .graph-heading { min-height: 72px; }
 .panel-heading-icon { display: inline-grid; place-items: center; width: 25px; height: 25px; border-radius: 5px; color: #75d7eb; background: rgba(48, 155, 181, .12); }
 .ai-generated { display: inline-flex; align-items: center; gap: 4px; padding: 3px 5px; border: 1px solid rgba(156, 133, 238, .17); border-radius: 4px; color: #b5a2ed; background: rgba(119, 90, 187, .1); font-size: 7px; letter-spacing: .3px; font-weight: 700; }
+.graph-filter-bar { display: flex; align-items: center; gap: 5px; min-height: 39px; padding: 5px 15px; border-top: 1px solid #1a2632; background: #0a1119; }
+.graph-filter-bar > span { margin-right: 3px; color: #6f7e90; font-size: 8px; letter-spacing: .7px; font-weight: 700; }
+.graph-filter-button { min-height: 24px; padding: 0 8px; border: 1px solid transparent; border-radius: 4px; background: transparent; color: #8391a1; font-size: 8px; cursor: pointer; transition: background .15s, border-color .15s, color .15s; }
+.graph-filter-button:hover { border-color: #293747; color: #c4cfda; }
+.graph-filter-button.active { border-color: rgba(75, 189, 151, .24); background: rgba(48, 142, 108, .12); color: #84dabb; }
 .graph-canvas { position: relative; height: 436px; border-top: 1px solid #1b2734; background: radial-gradient(ellipse at 50% 30%, rgba(19, 39, 51, .28), transparent 62%), #080e16; }
 .graph-canvas .react-flow { background: transparent; }
 .graph-canvas .react-flow__controls { overflow: hidden; border: 1px solid #293849; border-radius: 5px; background: #101925; box-shadow: none; }
@@ -226,6 +231,8 @@ tbody tr:hover { background: rgba(255,255,255,.015); }
 .graph-status .status-dot { width: 5px; height: 5px; margin: 0; }
 .graph-status-divider { width: 1px; height: 10px; margin: 0 1px; background: #354352; }
 .asset-node { position: relative; width: 238px; min-height: 88px; padding: 10px 11px 8px; border: 1px solid #45505e; border-radius: 7px; background: linear-gradient(140deg, #121c28, #0e1722); box-shadow: 0 7px 24px rgba(0,0,0,.24); }
+.react-flow__node-asset { cursor: pointer; transition: opacity .16s ease, filter .16s ease; }
+.react-flow__node-asset:hover .asset-node { filter: brightness(1.17); }
 .node-risk-critical { border-color: rgba(244, 104, 120, .72); box-shadow: inset 0 1px 0 rgba(244, 104, 120, .1), 0 5px 22px rgba(225, 75, 96, .1); }
 .node-risk-high { border-color: rgba(238, 155, 78, .72); box-shadow: inset 0 1px 0 rgba(238, 155, 78, .1), 0 5px 22px rgba(226, 137, 54, .09); }
 .node-risk-medium { border-color: rgba(238, 190, 78, .7); box-shadow: inset 0 1px 0 rgba(238, 190, 78, .1), 0 5px 22px rgba(226, 172, 54, .08); }
@@ -376,6 +383,25 @@ tbody tr:hover { background: rgba(255,255,255,.015); }
 .drawer-footer > svg { color: #78cdb0; }
 .drawer-footer span { flex: 1; }
 .drawer-footer button { padding: 6px 12px; border: 1px solid #2a3948; border-radius: 4px; background: #131d28; color: #c1ccd7; font-size: 9px; cursor: pointer; }
+.asset-inspection-drawer { display: flex; flex-direction: column; width: min(100%, 430px); height: 100%; border-left: 1px solid #2a3847; background: #0c131d; box-shadow: -20px 0 65px rgba(0,0,0,.42); animation: slide-in .2s ease-out; }
+.asset-drawer-content { flex: 1; overflow: auto; padding: 16px 18px; }
+.asset-risk-summary { display: flex; align-items: center; justify-content: space-between; padding: 13px; border: 1px solid #263442; border-radius: 6px; background: #101923; }
+.asset-risk-summary > div { display: grid; align-content: start; gap: 8px; }
+.asset-risk-summary > div:last-child { justify-items: end; }
+.asset-drawer-risk { color: #fb7185; font-size: 23px; line-height: 1; font-variant-numeric: tabular-nums; }
+.asset-drawer-risk small { margin-left: 3px; color: #748396; font-size: 9px; font-weight: 400; }
+.asset-drawer-risk.risk-high { color: #f3aa67; }
+.asset-drawer-risk.risk-medium { color: #e9ca75; }
+.asset-drawer-risk.risk-low { color: #73d5a5; }
+.asset-detail-section { display: grid; gap: 9px; margin-top: 16px; padding-bottom: 15px; border-bottom: 1px solid #1e2a36; }
+.asset-detail-section > p { margin: 0; color: #a0adba; font-size: 10px; line-height: 1.65; }
+.asset-blast-status { display: inline-flex; align-items: center; gap: 6px; width: fit-content; padding: 5px 7px; border: 1px solid #293645; border-radius: 4px; color: #9aa8b7; background: #111a24; font-size: 8px; }
+.asset-blast-status > i { width: 5px; height: 5px; border-radius: 50%; background: #8e9ba8; }
+.asset-blast-status.in-blast-radius { border-color: rgba(231, 112, 121, .2); color: #ee9699; background: rgba(159, 59, 67, .1); }
+.asset-blast-status.in-blast-radius > i { background: #f17b83; box-shadow: 0 0 6px rgba(241, 123, 131, .45); }
+.asset-recommendation-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.asset-recommendation-list li { display: flex; align-items: flex-start; gap: 7px; color: #b6c2cd; font-size: 9px; line-height: 1.55; }
+.asset-recommendation-list li svg { flex: 0 0 auto; margin-top: 1px; color: #77d7b1; }
 
 .audit-feed-panel { overflow: hidden; border: 1px solid var(--border); border-radius: 7px; background: var(--surface); box-shadow: 0 8px 26px rgba(0, 0, 0, .08); }
 .audit-feed-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 15px 16px; }
@@ -473,6 +499,7 @@ tbody tr:hover { background: rgba(255,255,255,.015); }
   .graph-canvas { height: 390px; }
   .graph-legend { gap: 6px; right: 7px; bottom: 7px; font-size: 7px; }
   .graph-status { top: 8px; left: 8px; font-size: 7px; }
+  .graph-filter-bar { flex-wrap: wrap; padding-right: 8px; padding-left: 8px; }
   .graph-footnote { align-items: flex-start; gap: 5px; flex-direction: column; }
   .investigation-right { grid-template-columns: 1fr; }
   .findings-panel { grid-row: auto; }
