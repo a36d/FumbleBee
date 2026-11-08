@@ -76,6 +76,19 @@ export function AuditFeedPanel({ activities, auditEntries, incidentId }: AuditFe
   const [copyError, setCopyError] = useState("");
   const [verification, setVerification] = useState<VerificationState>("pending");
 
+  useEffect(() => {
+    const syncAuditHash = () => {
+      if (window.location.hash === "#audit-trail") {
+        setActiveTab("audit");
+      } else if (window.location.hash === "#activity") {
+        setActiveTab("activity");
+      }
+    };
+    syncAuditHash();
+    window.addEventListener("hashchange", syncAuditHash);
+    return () => window.removeEventListener("hashchange", syncAuditHash);
+  }, []);
+
   const chronologicalActivities = useMemo(
     () => [...activities].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
     [activities],
@@ -133,7 +146,7 @@ export function AuditFeedPanel({ activities, auditEntries, incidentId }: AuditFe
   }
 
   return (
-    <section className="audit-feed-panel" aria-label="Activity and audit log">
+    <section className="audit-feed-panel" id="audit-trail" aria-label="Activity and audit log">
       <header className="audit-feed-header">
         <div className="audit-feed-heading">
           <div>

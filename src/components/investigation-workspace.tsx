@@ -63,6 +63,25 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
   const [checked, setChecked] = useState<string[]>([]);
   const [sentinelClient, setSentinelClient] = useState<ReturnType<typeof createSentinelGraphClient> | null>(null);
 
+  useEffect(() => {
+    const focusWorkspaceTarget = () => {
+      if (window.location.hash === "#attack-graph") {
+        const graphPanel = document.getElementById("attack-graph");
+        graphPanel?.scrollIntoView({ behavior: "smooth", block: "center" });
+        graphPanel?.focus({ preventScroll: true });
+      }
+      if (window.location.hash === "#audit-trail") {
+        const auditPanel = document.getElementById("audit-trail");
+        auditPanel?.scrollIntoView({ behavior: "smooth", block: "center" });
+        window.requestAnimationFrame(() => document.getElementById("audit-tab")?.click());
+      }
+    };
+
+    focusWorkspaceTarget();
+    window.addEventListener("hashchange", focusWorkspaceTarget);
+    return () => window.removeEventListener("hashchange", focusWorkspaceTarget);
+  }, []);
+
   function applyAssetScopes(nodes: Node[]) {
     return nodes.map((node) => {
       const asset = node.data.asset as FrontendAsset | undefined;
@@ -625,7 +644,7 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
 
       <div className="investigation-layout">
         <div className="investigation-left">
-          <section className="panel graph-panel">
+          <section className="panel graph-panel" id="attack-graph" tabIndex={-1}>
             <div className="panel-heading graph-heading"><div><div className="section-title-row"><h2>Attack path</h2></div><p>Observed entity relationships and potential data exposure path</p></div><button className="button button-quiet" onClick={() => setAuditOpen(true)}>Evidence log</button></div>
             <div className="graph-filter-bar" role="group" aria-label="Filter attack graph nodes">
               <span>SHOW</span>

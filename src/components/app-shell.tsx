@@ -11,6 +11,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const isInvestigation = pathname.startsWith("/investigations/");
   const isIncidents = pathname === "/incidents";
+  const investigationMatch = pathname.match(/^\/investigations\/([^/?#]+)/);
+  const incidentId = investigationMatch?.[1] ?? "1";
+  const attackGraphHref = `/investigations/${incidentId}#attack-graph`;
+  const auditTrailHref = `/investigations/${incidentId}#audit-trail`;
 
   return (
     <SpacetimeConnectionProvider>
@@ -25,8 +29,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <nav className="main-nav">
           <Link className={`nav-item ${!isInvestigation && !isIncidents ? "active" : ""}`} href="/">Overview</Link>
           <Link className={`nav-item ${isInvestigation || isIncidents ? "active" : ""}`} href="/incidents">Incident Command Hub</Link>
-          <a className="nav-item" href="#activity">Attack graph</a>
-          <a className="nav-item" href="#audit">Audit trail</a>
+          <Link className="nav-item" href={attackGraphHref}>Attack graph</Link>
+          <Link className="nav-item" href={auditTrailHref}>Audit trail</Link>
         </nav>
         <div className="sidebar-bottom">
           <div className="system-status"><span className="status-dot" /><span><strong>All systems operational</strong><small>Last synced just now</small></span></div>
