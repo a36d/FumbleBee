@@ -1613,6 +1613,23 @@ body { color: var(--text); }
   font-size: 11px;
 }
 .containment-section > p { margin: 0; color: #173f45; font-size: 12px; line-height: 1.5; }
+.tactical-playbook { display: grid; gap: 9px; padding: 11px; border: 1px solid #88a9aa; border-radius: 6px; background: #d5e0dc; }
+.tactical-playbook-heading { display: grid; gap: 9px; }
+.tactical-playbook-heading h3 { margin: 0; color: #173f45; font-size: 12px; }
+.tactical-playbook-heading p { margin: 4px 0 0; color: #3c686d; font-size: 10px; }
+.tactical-generate-button { width: fit-content; min-height: 31px; font-size: 10px; }
+.tactical-command-card { display: grid; gap: 9px; }
+.tactical-command-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.environment-badge { padding: 4px 7px; border: 1px solid #638286; border-radius: 4px; background: #bacbc8; color: #173f45; font-size: 8px; font-weight: 700; letter-spacing: .3px; }
+.copy-command-button { display: inline-flex; align-items: center; gap: 5px; min-height: 26px; padding: 0 7px; border: 1px solid #638286; border-radius: 4px; background: #bacbc8; color: #173f45; font-size: 9px; font-weight: 600; cursor: pointer; }
+.copy-command-button:hover { border-color: #b99735; color: #66571f; }
+.tactical-terminal { padding: 12px; border-color: #28585e; background: #102f35; color: #d5bb52; font-size: 10px; }
+.command-executable { color: #88d6c1; font-weight: 700; }
+.command-flag { color: #8fc9ef; }
+.command-placeholder { color: #f0a476; }
+.command-value { color: #e8d684; }
+.mitigation-rationale { margin: 0; color: #173f45; font-size: 10px; line-height: 1.55; }
+.mitigation-error { margin: 0; color: #963c31; font-size: 10px; line-height: 1.5; }
 .mitigation-terminal {
   overflow-x: auto;
   margin: 0;

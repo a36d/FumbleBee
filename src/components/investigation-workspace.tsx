@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, LoaderCircle, ShieldCheck, X } from "lucide-react";
+import { Check, Clipboard, ClipboardCheck, LoaderCircle, ShieldCheck, X } from "lucide-react";
 import Link from "next/link";
 import type { Node } from "@xyflow/react";
 import { createSentinelGraphClient, formatAttackGraph, type AiAnalysisInput } from "@/sdk/src/index";
@@ -17,6 +17,14 @@ import { AuditFeedPanel, type AuditFeedActivity, type AuditFeedEntry } from "@/c
 import { SeverityBadge, StatusBadge } from "@/components/severity-badge";
 import { useSpacetimeConnection } from "@/components/spacetime-connection-provider";
 
+type MitigationPlaybook = {
+  assetId: string;
+  environment: "AWS CLI" | "BASH";
+  command: string;
+  rationale: string;
+  notice: string;
+};
+
 export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
   const { connection } = useSpacetimeConnection();
   const fallbackIncident = useMemo(() => incidents.find((item) => item.id === incidentId) ?? incidents[0], [incidentId]);
@@ -30,6 +38,10 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
   const [analysisRunning, setAnalysisRunning] = useState(false);
   const [analysisError, setAnalysisError] = useState("");
   const [assetActionPending, setAssetActionPending] = useState(false);
+  const [mitigationGenerating, setMitigationGenerating] = useState(false);
+  const [mitigationError, setMitigationError] = useState("");
+  const [mitigationPlaybook, setMitigationPlaybook] = useState<MitigationPlaybook | null>(null);
+  const [copiedMitigationAssetId, setCopiedMitigationAssetId] = useState("");
   const [exportFormat, setExportFormat] = useState<"markdown" | "json">("markdown");
   const [exportRunning, setExportRunning] = useState(false);
   const [exportError, setExportError] = useState("");
@@ -419,7 +431,10 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
     setAssetActionPending(true);
     setAnalysisError("");
     const actionType = getContainmentActionType(selectedAsset.type);
-    const mitigationDetails = `${getContainmentAction(selectedAsset.type)} requested for ${selectedAsset.name}. FumbleBee records the action; no infrastructure adapter is configured.`;
+    const command = mitigationPlaybook?.assetId === selectedAsset.id
+      ? mitigationPlaybook.command
+      : `containment.request --asset "${selectedAsset.name}" --action "${actionType}" --mode record-only`;
+    const mitigationDetails = `Applied forensic action for ${selectedAsset.name}: ${command}. ${mitigationPlaybook?.assetId === selectedAsset.id ? mitigationPlaybook.notice : "FumbleBee records the action; no infrastructure adapter is configured."}`;
     try {
       await connection.reducers.applyAssetContainment({
         assetId: selectedAsset.databaseId,
@@ -430,6 +445,45 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
       setAnalysisError(error instanceof Error ? error.message : "Asset containment failed.");
     } finally {
       setAssetActionPending(false);
+    }
+  }
+
+  async function generateMitigationCommand() {
+    if (!selectedAsset || mitigationGenerating) return;
+    setMitigationGenerating(true);
+    setMitigationError("");
+    setCopiedMitigationAssetId("");
+    try {
+      const response = await fetch("/api/assets/mitigate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          asset: {
+            id: selectedAsset.id,
+            name: selectedAsset.name,
+            type: selectedAsset.type,
+            description: selectedAsset.description,
+            scopeStatus: selectedAssetScope,
+          },
+        }),
+      });
+      const result = await response.json() as MitigationPlaybook & { error?: string };
+      if (!response.ok) throw new Error(result.error ?? "Could not generate a mitigation command.");
+      setMitigationPlaybook(result);
+    } catch (error) {
+      setMitigationError(error instanceof Error ? error.message : "Could not generate a mitigation command.");
+    } finally {
+      setMitigationGenerating(false);
+    }
+  }
+
+  async function copyMitigationCommand(command: string, assetId: string) {
+    try {
+      await navigator.clipboard.writeText(command);
+      setCopiedMitigationAssetId(assetId);
+      window.setTimeout(() => setCopiedMitigationAssetId((current) => current === assetId ? "" : current), 1800);
+    } catch (error) {
+      setMitigationError(error instanceof Error ? `Could not copy command: ${error.message}` : "Could not copy command to clipboard.");
     }
   }
 
@@ -562,7 +616,31 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
               <section className="asset-detail-section containment-section">
                 <span className="summary-label">OUT-OF-BAND CONTAINMENT</span>
                 <p>{getContainmentAction(selectedAsset.type)} action for this asset.</p>
-                <pre className="mitigation-terminal"><code>{`containment.request --asset "${selectedAsset.name}" --action "${getContainmentActionType(selectedAsset.type)}" --mode record-only`}</code></pre>
+                <section className="tactical-playbook" aria-labelledby="tactical-playbook-title">
+                  <div className="tactical-playbook-heading">
+                    <div><h3 id="tactical-playbook-title">Tactical Mitigation Playbook</h3><p>Generate a command for analyst review.</p></div>
+                    <button className="button button-secondary tactical-generate-button" onClick={() => void generateMitigationCommand()} disabled={mitigationGenerating}>
+                      {mitigationGenerating ? <><LoaderCircle className="spin" size={14} /> Generating...</> : "Generate Mitigation Command"}
+                    </button>
+                  </div>
+                  {mitigationError && <p className="mitigation-error" role="alert">{mitigationError}</p>}
+                  {mitigationPlaybook?.assetId === selectedAsset.id ? (
+                    <div className="tactical-command-card">
+                      <div className="tactical-command-toolbar">
+                        <span className="environment-badge">{mitigationPlaybook.environment}</span>
+                        <button className="copy-command-button" onClick={() => void copyMitigationCommand(mitigationPlaybook.command, selectedAsset.id)}>
+                          {copiedMitigationAssetId === selectedAsset.id ? <ClipboardCheck size={13} /> : <Clipboard size={13} />}
+                          {copiedMitigationAssetId === selectedAsset.id ? "Copied!" : "Copy Command"}
+                        </button>
+                      </div>
+                      <pre className="mitigation-terminal tactical-terminal"><code>{highlightMitigationCommand(mitigationPlaybook.command)}</code></pre>
+                      <p className="mitigation-rationale">{mitigationPlaybook.rationale}</p>
+                      <small className="containment-disclaimer">{mitigationPlaybook.notice}</small>
+                    </div>
+                  ) : (
+                    <pre className="mitigation-terminal"><code>{`containment.request --asset "${selectedAsset.name}" --action "${getContainmentActionType(selectedAsset.type)}" --mode record-only`}</code></pre>
+                  )}
+                </section>
                 <small className="containment-disclaimer">Demo simulation only. No infrastructure command is executed.</small>
                 <button className="containment-button" onClick={() => void executeContainment()} disabled={assetActionPending || selectedAssetScope === "Quarantined"}>
                   {assetActionPending ? <><LoaderCircle className="spin" size={15} /> Applying containment...</> : selectedAssetScope === "Quarantined" ? <><ShieldCheck size={16} /> Asset Quarantined</> : "Execute Out-of-Band Containment"}
@@ -581,6 +659,22 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
       )}
     </>
   );
+}
+
+function highlightMitigationCommand(command: string) {
+  return command.split(/(\s+|--[a-z-]+|'[^']*'|<[^>]+>)/gi).filter(Boolean).map((token, index) => {
+    if (/^\s+$/.test(token)) return token;
+    const className = token.startsWith("--")
+      ? "command-flag"
+      : /^<[^>]+>$/.test(token)
+        ? "command-placeholder"
+        : /^'.*'$/.test(token)
+          ? "command-value"
+          : index === 0
+            ? "command-executable"
+            : "";
+    return <span className={className} key={`${index}-${token}`}>{token}</span>;
+  });
 }
 
 function getAssetSeverity(riskLabel: string | undefined, fallback: FrontendIncident["severity"]): FrontendIncident["severity"] {
