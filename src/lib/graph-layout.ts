@@ -36,7 +36,7 @@ export function getAttackPathLayout(nodes: Node[], edges: Edge[]) {
     animated: edge.animated ?? true,
     selectable: false,
     style: { stroke: "#d5bb52", strokeWidth: 2, ...edge.style },
-    labelStyle: { fill: "#638286", fontSize: 10, fontWeight: 600, ...edge.labelStyle },
+    labelStyle: { fill: "#d5bb52", fontSize: 10, fontWeight: 600, ...edge.labelStyle },
     labelBgStyle: { fill: "#102f35", fillOpacity: 1, ...edge.labelBgStyle },
     labelBgPadding: edge.labelBgPadding ?? [6, 3],
     labelBgBorderRadius: edge.labelBgBorderRadius ?? 4,
