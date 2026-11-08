@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { ArrowDown, ArrowRight, X } from "lucide-react";
+import { ArrowRight, X } from "lucide-react";
 import { incidents } from "@/lib/mock-data";
 import type { Incident, Severity } from "@/lib/types";
 import { MetricCard } from "@/components/metric-card";
@@ -13,8 +13,22 @@ const riskTone = (score: number) => score >= 85 ? "risk-critical" : score >= 70 
 export function Dashboard() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const [severityFilter, setSeverityFilter] = useState<"All severity" | Severity>("All severity");
   const [localIncidents, setLocalIncidents] = useState(incidents);
-  const filtered = localIncidents.filter((incident) => `${incident.id} ${incident.title} ${incident.subjectName}`.toLowerCase().includes(query.toLowerCase()));
+  const normalizedQuery = query.trim().toLowerCase();
+  const filtered = localIncidents.filter((incident) => {
+    const matchesSearch = `${incident.id} ${incident.title} ${incident.subjectName}`
+      .toLowerCase()
+      .includes(normalizedQuery);
+    const matchesSeverity = severityFilter === "All severity" || incident.severity === severityFilter;
+    return matchesSearch && matchesSeverity;
+  });
+  const hasActiveFilters = normalizedQuery.length > 0 || severityFilter !== "All severity";
+
+  function clearFilters() {
+    setQuery("");
+    setSeverityFilter("All severity");
+  }
 
   function createIncident(formData: FormData) {
     const title = String(formData.get("title") || "").trim();
@@ -56,7 +70,21 @@ export function Dashboard() {
       <section className="panel investigations-panel">
         <div className="panel-heading">
           <div><div className="section-title-row"><h2>Investigations</h2><span className="count-pill">{localIncidents.length}</span></div><p>Review and manage active threat investigations</p></div>
-          <div className="table-actions"><label className="table-search"><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search investigations..." /></label><button className="button button-secondary filter-button">All severity <ArrowDown size={13} /></button></div>
+          <div className="table-actions">
+            <label className="table-search"><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search investigations..." /></label>
+            <select
+              className="button button-secondary filter-button severity-filter-select"
+              aria-label="Filter investigations by severity"
+              value={severityFilter}
+              onChange={(event) => setSeverityFilter(event.target.value as "All severity" | Severity)}
+            >
+              <option value="All severity">All severity</option>
+              <option value="Critical">Critical</option>
+              <option value="High">High</option>
+              <option value="Medium">Medium</option>
+              <option value="Low">Low</option>
+            </select>
+          </div>
         </div>
         <div className="table-wrap">
           <table>
@@ -73,9 +101,12 @@ export function Dashboard() {
               </tr>
             ))}</tbody>
           </table>
-          {filtered.length === 0 && <div className="empty-state">No investigations match “{query}”.</div>}
+          {filtered.length === 0 && <div className="empty-state">No investigations match the active search and severity filters.</div>}
         </div>
-        <div className="table-footer"><span>Showing <strong>{filtered.length}</strong> of <strong>{localIncidents.length}</strong> investigations</span><button>View all investigations</button></div>
+        <div className="table-footer">
+          <span>Showing <strong>{filtered.length}</strong> of <strong>{localIncidents.length}</strong> investigations</span>
+          {hasActiveFilters && <button type="button" onClick={clearFilters}>View all investigations</button>}
+        </div>
       </section>
       <div className="dashboard-bottom">
         <section className="panel mini-panel"><div className="mini-title"><div><h3>Threat activity</h3><span>Last 7 days</span></div></div><div className="activity-chart" aria-label="Threat activity trend chart"><div className="chart-y-labels"><span>40</span><span>20</span><span>0</span></div><div className="chart-plot"><div className="chart-gridline one" /><div className="chart-gridline two" /><div className="chart-bars">{[28, 42, 33, 61, 48, 77, 58, 84, 55, 70, 93, 65, 74, 46, 81, 57, 68, 87].map((height, index) => <i key={index} style={{ height: `${height}%` }} />)}</div><div className="chart-days"><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span></div></div></div></section>

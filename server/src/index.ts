@@ -114,13 +114,36 @@ const spacetime = schema({
 
 type Role = 'admin' | 'investigator' | 'commander' | 'legal' | 'viewer';
 
+function defaultEmail(value: string): string {
+  const localPart = value
+    .trim()
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '.')
+    .replace(/^\.+|\.+$/g, '')
+    .replace(/\.+/g, '.');
+  return `${localPart || 'responder'}@fumblebee.local`;
+}
+
+function contactEmail(value: string, displayName: string): string {
+  const email = value.trim().toLowerCase();
+  if (
+    /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+    && !email.endsWith('@sentinelgraph.local')
+  ) {
+    return email;
+  }
+  return defaultEmail(displayName);
+}
+
 function requireRole(ctx: any, allowed: Role[]) {
   let row = ctx.db.user.identity.find(ctx.sender);
   if (!row) {
     row = ctx.db.user.insert({
       identity: ctx.sender,
       name: 'SOC Analyst',
-      email: 'analyst@sentinelgraph.local',
+      email: 'analyst@fumblebee.local',
       username: `soc-${ctx.sender.toHexString().slice(0, 12)}`,
       passphraseHash: '',
       role: 'investigator',
@@ -228,7 +251,7 @@ export const init = spacetime.init((ctx: any) => {
     ctx.db.user.insert({
       identity: ctx.sender,
       name: 'Administrator',
-      email: 'admin@sentinelgraph.local',
+      email: 'admin@fumblebee.local',
       username: 'administrator',
       passphraseHash: '',
       role: 'admin',
@@ -250,7 +273,7 @@ export const createUser = spacetime.reducer(
     ctx.db.user.insert({
       identity: args.identity,
       name: args.name,
-      email: args.email,
+      email: contactEmail(args.email, args.name),
       username,
       passphraseHash: '',
       role: args.role,
@@ -275,7 +298,7 @@ export const signUp = spacetime.reducer(
     ctx.db.user.insert({
       identity: ctx.sender,
       name: username,
-      email: `${username}@sentinelgraph.local`,
+      email: defaultEmail(username),
       username,
       passphraseHash: args.passphraseHash,
       role: args.role,
@@ -325,7 +348,7 @@ export const updateUserProfile = spacetime.reducer(
     const existing = ctx.db.user.identity.find(ctx.sender);
     if (!existing) throw new SenderError('Responder account not found');
     const name = args.name.trim();
-    const email = args.email.trim().toLowerCase();
+    const email = contactEmail(args.email, name);
     if (!name || name.length > 100) throw new SenderError('Name must be between 1 and 100 characters');
     if (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       throw new SenderError('Enter a valid contact email');

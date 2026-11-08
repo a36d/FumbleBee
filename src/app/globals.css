@@ -141,6 +141,8 @@ h1, h2, h3, p { margin-top: 0; }
 .table-search input { width: 100%; border: 0; outline: 0; background: transparent; color: #cbd9d5; font-size: 10px; }
 .table-search input::placeholder { color: #638286; }
 .filter-button { min-height: 31px; font-size: 10px; }
+.severity-filter-select { appearance: auto; min-width: 105px; padding: 0 28px 0 9px; border-color: #102f35; outline: none; color: #cbd9d5; background-color: #102f35; cursor: pointer; }
+.severity-filter-select option { color: #f4f4f5; background-color: #18181b; }
 .table-wrap { width: 100%; overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; text-align: left; white-space: nowrap; }
 thead { background: #102f35; }
