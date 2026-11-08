@@ -9,6 +9,22 @@ import type {
 
 export const incidents: Incident[] = [
   {
+    id: "1",
+    subjectName: "svc-prod-data-pipeline",
+    title: "Unusual Bulk Data Access & Privilege Escalation",
+    description: "Production service account accessed sensitive S3 storage buckets and modified IAM trust policies outside standard business hours.",
+    triggerDetails: "Bulk access to production S3 buckets and an IAM trust policy change outside standard business hours.",
+    severity: "High",
+    riskScore: 78,
+    status: "Investigating",
+    createdAt: "2026-11-07T18:00:00Z",
+    threatClassification: "Pending analysis",
+    blastRadius: 0,
+    impactSummary: "Potential exposure of production data and unauthorized privilege escalation.",
+    recommendations: [],
+    confidence: 0,
+  },
+  {
     id: "INC-2024-0847",
     subjectName: "Morgan Chen",
     title: "Unusual data access before departure",
@@ -103,7 +119,20 @@ export const relationships: Relationship[] = [
   { id: "r3", sourceId: "s-source", targetId: "d-customer", label: "queried" },
 ];
 
+export const seededIncidentAssets: Asset[] = [
+  { id: "svc-prod-data-pipeline", name: "svc-prod-data-pipeline", type: "identity", description: "Production service account · elevated IAM access", riskLabel: "High" },
+  { id: "s3-production", name: "Production S3 Buckets", type: "share", description: "Sensitive production object storage", riskLabel: "High" },
+  { id: "iam-trust-policy", name: "IAM Trust Policy", type: "resource", description: "Trust relationship modified after-hours", riskLabel: "Critical" },
+];
+
+export const seededIncidentRelationships: Relationship[] = [
+  { id: "seed-r1", sourceId: "svc-prod-data-pipeline", targetId: "s3-production", label: "bulk data access" },
+  { id: "seed-r2", sourceId: "svc-prod-data-pipeline", targetId: "iam-trust-policy", label: "modified trust policy" },
+];
+
 export const notes: InvestigationNote[] = [
+  { id: "seed-note-1", incidentId: "1", author: "Security Operations", initials: "SO", content: "CloudTrail shows bulk reads from production S3 buckets outside the service account's standard business hours.", createdAt: "2026-11-07T17:48:00Z" },
+  { id: "seed-note-2", incidentId: "1", author: "Identity Response", initials: "IR", content: "An IAM trust policy was modified shortly before the unusual access. Preserve the policy history and review the new principal.", createdAt: "2026-11-07T17:55:00Z" },
   { id: "n1", incidentId: "INC-2024-0847", author: "Priya Shah", initials: "PS", content: "Confirmed the device is not enrolled in endpoint management. Preserving sign-in and file access logs.", createdAt: "2024-11-18T10:12:00Z" },
   { id: "n2", incidentId: "INC-2024-0847", author: "David Kim", initials: "DK", content: "Manager notified. Employee's last working day is scheduled for Friday.", createdAt: "2024-11-18T10:03:00Z" },
 ];

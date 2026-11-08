@@ -19,7 +19,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <div className="nav-label">WORKSPACE</div>
         <nav className="main-nav">
           <Link className={`nav-item ${!isInvestigation ? "active" : ""}`} href="/"><LayoutDashboard size={17} /> Overview</Link>
-          <Link className={`nav-item ${isInvestigation ? "active" : ""}`} href="/investigations/INC-2024-0847"><Activity size={17} /> Investigations <span className="nav-count">12</span></Link>
+          <Link className={`nav-item ${isInvestigation ? "active" : ""}`} href="/investigations/1"><Activity size={17} /> Investigations <span className="nav-count">12</span></Link>
           <a className="nav-item" href="#activity"><Network size={17} /> Attack graph</a>
           <a className="nav-item" href="#audit"><FileClock size={17} /> Audit trail</a>
         </nav>

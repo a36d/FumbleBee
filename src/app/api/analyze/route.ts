@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { analyzeWithNemotron, NemotronInputSchema } from "../../../../services/nemotron";
+import { analyzeWithNemotron, NemotronInputSchema } from "@/services/nemotron";
 
 export async function POST(request: Request) {
   let body: unknown;

@@ -3,8 +3,8 @@
 import { useMemo, useState } from "react";
 import { Activity, AlertTriangle, ArrowLeft, ArrowUpRight, Check, CheckCircle2, Clock3, FileClock, Fingerprint, LoaderCircle, LockKeyhole, Plus, Shield, Sparkles } from "lucide-react";
 import Link from "next/link";
-import { formatAttackGraph, type AiAnalysisInput } from "../../sdk/src/index";
-import { activity as initialActivity, assets, auditLogs, incidents, notes as initialNotes, relationships, relativeTime } from "@/lib/mock-data";
+import { formatAttackGraph, type AiAnalysisInput } from "@/sdk/src/index";
+import { activity as initialActivity, assets, auditLogs, incidents, notes as initialNotes, relationships, relativeTime, seededIncidentAssets, seededIncidentRelationships } from "@/lib/mock-data";
 import { getAttackPathLayout } from "@/lib/graph-layout";
 import type { ActivityFeed, InvestigationNote } from "@/lib/types";
 import { AttackGraph } from "@/components/attack-graph";
@@ -21,7 +21,9 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
   const [analysisError, setAnalysisError] = useState("");
   const [analysisResult, setAnalysisResult] = useState<AiAnalysisInput | null>(null);
   const [graph, setGraph] = useState(() => {
-    const formattedGraph = formatAttackGraph(assets, relationships);
+    const graphAssets = incident.id === "1" ? seededIncidentAssets : assets;
+    const graphRelationships = incident.id === "1" ? seededIncidentRelationships : relationships;
+    const formattedGraph = formatAttackGraph(graphAssets, graphRelationships);
     return getAttackPathLayout(formattedGraph.nodes, formattedGraph.edges);
   });
   const [auditOpen, setAuditOpen] = useState(false);
@@ -87,7 +89,7 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
   return (
     <>
       <div className="investigation-heading">
-        <div><Link href="/" className="back-link"><ArrowLeft size={14} /> All investigations</Link><div className="investigation-title-row"><h1>{incident.title}</h1><SeverityBadge severity={incident.severity} /></div><div className="investigation-meta"><span>{incident.id}</span><span className="meta-dot">·</span><span>Subject: <strong>{incident.subjectName}</strong></span><span className="meta-dot">·</span><StatusBadge status={incident.status} /></div></div>
+        <div><Link href="/" className="back-link"><ArrowLeft size={14} /> All investigations</Link><div className="investigation-title-row"><h1>{incident.title}</h1><SeverityBadge severity={findings.severity} /></div><div className="investigation-meta"><span>{incident.id}</span><span className="meta-dot">·</span><span>Subject: <strong>{incident.subjectName}</strong></span><span className="meta-dot">·</span><StatusBadge status={incident.status} /></div></div>
         <div className="heading-actions"><button className="button button-secondary" onClick={() => setAuditOpen(true)}><Fingerprint size={16} /> Audit trail</button><button className="button button-primary" onClick={runAnalysis} disabled={analysisRunning}>{analysisRunning ? <LoaderCircle className="spin" size={16} /> : <Sparkles size={16} />}{analysisRunning ? "Analyzing..." : "Run AI analysis"}</button></div>
       </div>
       {analysisError && <p className="analysis-error" role="alert">{analysisError}</p>}
@@ -104,7 +106,7 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
           <section className="panel graph-panel">
             <div className="panel-heading graph-heading"><div><div className="section-title-row"><span className="panel-heading-icon"><Activity size={16} /></span><h2>Attack path</h2><span className="ai-generated"><Sparkles size={11} /> AI GENERATED</span></div><p>Observed entity relationships and potential data exposure path</p></div><button className="button button-quiet" onClick={() => setAuditOpen(true)}><LockKeyhole size={14} /> Evidence log</button></div>
             <AttackGraph nodes={graph.nodes} edges={graph.edges} />
-            <div className="graph-footnote"><span><i className="graph-foot-dot" /> Path confidence <strong>96%</strong></span><span>Generated Nov 18, 2024 at 09:44 UTC</span></div>
+            <div className="graph-footnote"><span><i className="graph-foot-dot" /> Path confidence <strong>{findings.confidence}%</strong></span><span>{analysisResult ? "Generated just now" : "Seeded investigation path"}</span></div>
           </section>
           <section className="panel impact-panel"><div className="panel-heading"><div><div className="section-title-row"><span className="panel-heading-icon panel-icon-rose"><AlertTriangle size={16} /></span><h2>Impact summary</h2></div></div><span className="impact-tag">{findings.severity.toUpperCase()} IMPACT</span></div><p>{findings.impactSummary} Activity spans <strong>{findings.blastRadius} connected assets</strong>.</p><div className="impact-tags"><span><DatabaseIcon /> Customer records</span><span><CodeIcon /> Source code</span><span><LockKeyhole size={12} /> Restricted share</span></div></section>
         </div>
