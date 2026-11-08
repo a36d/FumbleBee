@@ -168,6 +168,27 @@ export function Dashboard() {
   });
   const chartMax = Math.max(1, ...chartCounts);
   const chartHeights = chartCounts.map((count) => Math.round((count / chartMax) * 100));
+  const visibleOpenIncidents = displayIncidents.filter((incident) => {
+    const status = incident.status.toLowerCase();
+    return status !== "resolved" && status !== "contained" && status !== "closed";
+  });
+  const activeInvestigationCount = visibleOpenIncidents.length;
+  const highRiskSubjects = new Set(
+    visibleOpenIncidents
+      .filter((incident) => incident.severity === "Critical" || incident.severity === "High")
+      .map((incident) => incident.subjectName.trim().toLowerCase())
+      .filter(Boolean),
+  );
+  const highRiskUserCount = highRiskSubjects.size;
+  const atRiskAssetCount = new Set(
+    visibleOpenIncidents
+      .map((incident) => incident.subjectName.trim().toLowerCase())
+      .filter(Boolean),
+  ).size || liveAssets.filter((asset) => {
+    const status = asset.compromiseStatus.toLowerCase();
+    return status === "at-risk" || status === "at_risk" || status === "high" || status === "critical";
+  }).length || liveAssets.length;
+  const recentAlertCount = liveAuditLogs.length || visibleOpenIncidents.length;
 
   const normalizedQuery = query.trim().toLowerCase();
   const filtered = displayIncidents.filter((incident) => {
@@ -262,30 +283,19 @@ export function Dashboard() {
       <div className="metric-grid">
         <MetricCard
           label="Active investigations"
-          value={String(liveIncidents.filter((incident) => incident.status.toLowerCase() !== "resolved").length)}
-          change=""
-          changeLabel="across organization"
+          value={String(activeInvestigationCount)}
         />
         <MetricCard
           label="High-risk users / responders"
-          value={String(liveUsers.filter((user) => user.role.toLowerCase() !== "viewer").length)}
-          change=""
-          changeLabel="active responders"
+          value={String(highRiskUserCount)}
         />
         <MetricCard
           label="Assets at risk"
-          value={String(liveAssets.filter((asset) => {
-            const status = asset.compromiseStatus.toLowerCase();
-            return status === "at-risk" || status === "at_risk" || status === "high" || status === "critical";
-          }).length || (liveAssets.length ? liveAssets.length : 0))}
-          change=""
-          changeLabel="asset inventory"
+          value={String(atRiskAssetCount)}
         />
         <MetricCard
           label="Recent alerts"
-          value={String(liveAuditLogs.length)}
-          change=""
-          changeLabel="audit events"
+          value={String(recentAlertCount)}
         />
       </div>
 
