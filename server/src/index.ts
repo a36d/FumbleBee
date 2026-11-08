@@ -360,18 +360,23 @@ export const deleteUser = spacetime.reducer(
 );
 
 export const createIncident = spacetime.reducer(
-  { title: t.string(), description: t.string(), subjectName: t.string(), status: t.string(), severity: t.string() },
+  { title: t.string(), description: t.string(), severity: t.string(), initialNotes: t.string() },
   (ctx: any, args: any) => {
-    const actor = requireRole(ctx as any, ['admin', 'investigator']);
+    const actor = requireRole(ctx as any, ['admin', 'investigator', 'commander']);
+    const title = args.title.trim();
+    const description = args.description.trim();
+    const validSeverities = ['Low', 'Medium', 'High', 'Critical'];
+    if (!title) throw new SenderError('Incident title is required');
+    if (!validSeverities.includes(args.severity)) throw new SenderError('Invalid severity');
     const row = ctx.db.incident.insert({
       id: 0n,
-      title: args.title,
-      description: args.description,
-      subjectName: args.subjectName,
-      status: args.status && args.status !== 'Open' ? args.status : 'Investigating',
+      title,
+      description,
+      subjectName: 'Pending Assignment',
+      status: 'Investigating',
       severity: args.severity,
       riskScore: 0,
-      classification: 'Pending Analysis',
+      classification: 'Unclassified',
       summary: '',
       triggerDetails: '',
       blastRadius: 0,
@@ -381,8 +386,20 @@ export const createIncident = spacetime.reducer(
       createdBy: ctx.sender,
       createdAt: ctx.timestamp,
     });
+    const initialNotes = args.initialNotes.trim();
+    if (initialNotes) {
+      ctx.db.investigationNote.insert({
+        id: 0n,
+        incidentId: row.id,
+        authorIdentity: ctx.sender,
+        authorName: actor.name,
+        content: initialNotes,
+        createdAt: ctx.timestamp,
+      });
+      addActivity(ctx, row.id, actor.name, 'Initial Investigation Note Added');
+    }
     addActivity(ctx, row.id, actor.name, 'Incident Created');
-    appendAudit(ctx, 'IncidentCreated', row.id);
+    appendAudit(ctx, `INCIDENT_CREATED: [${row.id}] - [${title}]`, row.id);
   },
 );
 
