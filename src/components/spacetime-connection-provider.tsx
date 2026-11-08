@@ -84,7 +84,7 @@ export function SpacetimeConnectionProvider({ children }: { children: React.Reac
     let active = true;
     const builder = DbConnection.builder()
       .withUri("http://localhost:3000")
-      .withDatabaseName("sentinelgraph")
+      .withDatabaseName("sentinelgraph-demo")
       .withAutomaticReconnect();
     const savedToken = readSavedToken();
     if (savedToken) builder.withToken(savedToken);

@@ -12,7 +12,7 @@ async function incidentExists(incidentId: bigint, timeoutMs = 5000): Promise<boo
 
     connection = DbConnection.builder()
       .withUri(process.env.SPACETIME_DB_HOST ?? "http://127.0.0.1:3000")
-      .withDatabaseName(process.env.SPACETIME_DB_NAME ?? "sentinelgraph")
+      .withDatabaseName(process.env.SPACETIME_DB_NAME ?? "sentinelgraph-demo")
       .onConnect((connected) => {
         connected.subscriptionBuilder()
           .onApplied(() => {

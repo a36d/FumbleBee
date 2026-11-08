@@ -3,7 +3,7 @@ import { existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 const HOST = process.env.NEXT_PUBLIC_SPACETIMEDB_URI || 'http://localhost:3000';
-const DATABASE = process.env.NEXT_PUBLIC_SPACETIMEDB_MODULE || 'sentinelgraph';
+const DATABASE = process.env.NEXT_PUBLIC_SPACETIMEDB_MODULE || 'sentinelgraph-demo';
 const DEMO_TITLE = 'Unusual Bulk Data Access & Exfiltration Attempt';
 const DEMO_NOTES = [
   'Spike in egress traffic detected via VPC Flow Logs toward external endpoint.',

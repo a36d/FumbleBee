@@ -151,12 +151,12 @@ async function readDatabaseSnapshot(timeoutMs = 15000): Promise<{
     let connection: DbConnection | null = null;
     const timer = setTimeout(() => {
       connection?.disconnect();
-      reject(new Error('Timed out connecting to SpacetimeDB sentinelgraph.'));
+      reject(new Error('Timed out connecting to SpacetimeDB sentinelgraph-demo.'));
     }, timeoutMs);
 
     connection = DbConnection.builder()
       .withUri(process.env.SPACETIME_DB_HOST ?? 'http://127.0.0.1:3000')
-      .withDatabaseName(process.env.SPACETIME_DB_NAME ?? 'sentinelgraph')
+      .withDatabaseName(process.env.SPACETIME_DB_NAME ?? 'sentinelgraph-demo')
       .onConnect((connected) => {
         connected.subscriptionBuilder()
           .onApplied(() => {

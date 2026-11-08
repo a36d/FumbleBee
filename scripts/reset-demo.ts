@@ -3,8 +3,8 @@ import { existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const HOST = 'http://127.0.0.1:3000';
-const DATABASE = 'sentinelgraph';
+const HOST = 'http://localhost:3000';
+const DATABASE = 'sentinelgraph-demo';
 
 function resolveSpacetimeCli(): string {
   const candidates = [
@@ -37,9 +37,9 @@ function runCli(args: string[]): string {
 function runSql(query: string): unknown[][] {
   const output = runCli([
     'sql',
+    '--server', HOST,
     DATABASE,
     query,
-    '--server', HOST,
     '--format', 'json',
     '--yes',
   ]);

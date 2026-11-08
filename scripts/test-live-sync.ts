@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 
 const HOST = 'http://127.0.0.1:3000';
-const DATABASE = 'sentinelgraph';
+const DATABASE = 'sentinelgraph-demo';
 
 function resolveSpacetimeCli(): string {
   const candidates = [

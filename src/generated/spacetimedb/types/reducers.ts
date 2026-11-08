@@ -7,16 +7,16 @@ import { type Infer as __Infer } from "spacetimedb";
 
 // Import all reducer arg schemas
 import AddInvestigationNoteReducer from "../add_investigation_note_reducer";
-import AssignIncidentReducer from "../assign_incident_reducer";
 import ApplyAiAnalysisReducer from "../apply_ai_analysis_reducer";
 import ApplyAssetContainmentReducer from "../apply_asset_containment_reducer";
+import AssignIncidentReducer from "../assign_incident_reducer";
 import AssignUserRoleReducer from "../assign_user_role_reducer";
 import ChangeUserPasswordReducer from "../change_user_password_reducer";
 import CreateIncidentReducer from "../create_incident_reducer";
 import CreateUserReducer from "../create_user_reducer";
 import DeleteUserReducer from "../delete_user_reducer";
-import InviteMemberReducer from "../invite_member_reducer";
 import InviteEmployeeReducer from "../invite_employee_reducer";
+import InviteMemberReducer from "../invite_member_reducer";
 import SetUserRoleReducer from "../set_user_role_reducer";
 import SignInReducer from "../sign_in_reducer";
 import SignUpReducer from "../sign_up_reducer";
@@ -25,19 +25,20 @@ import UpdateIncidentReducer from "../update_incident_reducer";
 import UpdateUserProfileReducer from "../update_user_profile_reducer";
 
 export type AddInvestigationNoteParams = __Infer<typeof AddInvestigationNoteReducer>;
-export type AssignIncidentParams = __Infer<typeof AssignIncidentReducer>;
 export type ApplyAiAnalysisParams = __Infer<typeof ApplyAiAnalysisReducer>;
 export type ApplyAssetContainmentParams = __Infer<typeof ApplyAssetContainmentReducer>;
+export type AssignIncidentParams = __Infer<typeof AssignIncidentReducer>;
 export type AssignUserRoleParams = __Infer<typeof AssignUserRoleReducer>;
 export type ChangeUserPasswordParams = __Infer<typeof ChangeUserPasswordReducer>;
 export type CreateIncidentParams = __Infer<typeof CreateIncidentReducer>;
 export type CreateUserParams = __Infer<typeof CreateUserReducer>;
 export type DeleteUserParams = __Infer<typeof DeleteUserReducer>;
-export type InviteMemberParams = __Infer<typeof InviteMemberReducer>;
 export type InviteEmployeeParams = __Infer<typeof InviteEmployeeReducer>;
+export type InviteMemberParams = __Infer<typeof InviteMemberReducer>;
 export type SetUserRoleParams = __Infer<typeof SetUserRoleReducer>;
 export type SignInParams = __Infer<typeof SignInReducer>;
 export type SignUpParams = __Infer<typeof SignUpReducer>;
 export type UpdateAssetCompromiseStatusParams = __Infer<typeof UpdateAssetCompromiseStatusReducer>;
 export type UpdateIncidentParams = __Infer<typeof UpdateIncidentReducer>;
 export type UpdateUserProfileParams = __Infer<typeof UpdateUserProfileReducer>;
+

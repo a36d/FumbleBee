@@ -5,7 +5,7 @@ async function testConnection() {
 
   const client = createSentinelGraphClient({
     host: 'http://localhost:3000',
-    dbName: 'sentinelgraph',
+    dbName: 'sentinelgraph-demo',
   });
 
   console.log("✓ Client created successfully.");

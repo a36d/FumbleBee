@@ -67,14 +67,6 @@ export const Incident = __t.object("Incident", {
 });
 export type Incident = __Infer<typeof Incident>;
 
-export const ResponderInvitation = __t.object("ResponderInvitation", {
-  id: __t.u64(),
-  username: __t.string(),
-  invitedBy: __t.identity(),
-  createdAt: __t.timestamp(),
-});
-export type ResponderInvitation = __Infer<typeof ResponderInvitation>;
-
 export const InvestigationNote = __t.object("InvestigationNote", {
   id: __t.u64(),
   incidentId: __t.u64(),
@@ -94,6 +86,14 @@ export const Relationship = __t.object("Relationship", {
 });
 export type Relationship = __Infer<typeof Relationship>;
 
+export const ResponderInvitation = __t.object("ResponderInvitation", {
+  id: __t.u64(),
+  username: __t.string(),
+  invitedBy: __t.identity(),
+  createdAt: __t.timestamp(),
+});
+export type ResponderInvitation = __Infer<typeof ResponderInvitation>;
+
 export const User = __t.object("User", {
   identity: __t.identity(),
   name: __t.string(),
@@ -104,3 +104,4 @@ export const User = __t.object("User", {
   passwordHash: __t.string(),
 });
 export type User = __Infer<typeof User>;
+

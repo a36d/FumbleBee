@@ -364,7 +364,7 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
 
     const client = createSentinelGraphClient({
       host: "http://localhost:3000",
-      databaseName: "sentinelgraph",
+      databaseName: "sentinelgraph-demo",
       transport: {
         reducer: {
           call: (_name, args) => {
