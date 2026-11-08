@@ -116,6 +116,21 @@ function sha256(value: string): string {
   return createHash('sha256').update(value, 'utf8').digest('hex');
 }
 
+function formatAuditAction(action: string): string {
+  if (!action.startsWith('ASSET_CONTAINMENT:')) return action;
+  const parts = action.split(':');
+  const allowedActions = new Set(['isolate_host', 'revoke_iam', 'lock_s3_bucket', 'block_network']);
+  if (parts.length >= 3 && allowedActions.has(parts[2])) {
+    const assetName = parts[1] || 'Unknown asset';
+    const actionType = parts[2];
+    return `Asset Contained: ${assetName} (${actionType})`;
+  }
+  if (parts.length >= 3 && allowedActions.has(parts[1])) {
+    return `Asset Contained: Asset #${parts[2]} (${parts[1]})`;
+  }
+  return action;
+}
+
 function canonicalTimestampMicros(value: TimestampLike | null | undefined): string {
   if (!value) return '0';
   return String(value.microsSinceUnixEpoch ?? value.micros ?? 0n);
@@ -192,13 +207,22 @@ export async function generateIncidentReport(incidentId: bigint): Promise<Incide
     quarantined: [] as string[],
     atRisk: [] as string[],
   };
+  const seenScopeAssets = new Set<string>();
   for (const asset of assets) {
     const status = (asset.compromiseStatus || 'targeted').toLowerCase();
     const label = `${asset.name} (${asset.assetKey || asset.id.toString()})`;
-    if (status === 'data_exfiltrated') scopeAssessment.exfiltrated.push(label);
-    else if (status === 'ransomware_encrypted') scopeAssessment.ransomwareEncrypted.push(label);
-    else if (status === 'quarantined') scopeAssessment.quarantined.push(label);
-    else scopeAssessment.atRisk.push(label);
+    const uniqueKey = (asset.assetKey || asset.name || asset.id.toString()).trim().toLowerCase();
+    if (seenScopeAssets.has(uniqueKey)) continue;
+    seenScopeAssets.add(uniqueKey);
+
+    const bucket = status === 'data_exfiltrated'
+      ? scopeAssessment.exfiltrated
+      : status === 'ransomware_encrypted'
+        ? scopeAssessment.ransomwareEncrypted
+        : status === 'quarantined'
+          ? scopeAssessment.quarantined
+          : scopeAssessment.atRisk;
+    bucket.push(label);
   }
 
   const sortedAuditLog = [...snapshot.auditLogs].sort((a, b) => {
@@ -231,7 +255,7 @@ export async function generateIncidentReport(incidentId: bigint): Promise<Incide
   const incidentAuditLogs = sortedAuditLog.filter(row => optionBigInt(row.incidentId) === incidentId);
   const attestationAuditTrail = incidentAuditLogs.map(row => ({
     sequenceId: row.sequenceId.toString(),
-    action: row.action,
+    action: formatAuditAction(row.action),
     actorIdentity: identityHex(row.actorIdentity),
     timestamp: formatTimestamp(row.timestamp),
     previousHash: row.previousHash,

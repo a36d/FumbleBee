@@ -661,7 +661,7 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
         </div>
       </div>
 
-      {auditOpen && <div className="drawer-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setAuditOpen(false); }}><aside className="audit-drawer" role="dialog" aria-modal="true" aria-labelledby="audit-title"><div className="drawer-header"><div><div className="drawer-kicker"><span className="status-dot" /> TAMPER-EVIDENT RECORD</div><h2 id="audit-title">Audit trail</h2><p>Cryptographically linked investigation events.</p></div><button className="icon-button" onClick={() => setAuditOpen(false)} aria-label="Close audit trail">×</button></div><div className="chain-status"><span><strong>Chain integrity verified</strong><small>All {auditLogs.length} entries are linked and unmodified</small></span></div><div className="audit-list">{auditLogs.map((log) => <article className="audit-entry" key={log.id}><div className="audit-entry-heading"><span className="audit-sequence">#{String(log.sequence).padStart(4, "0")}</span><span className="audit-time">{relativeTime(log.timestamp)}</span></div><h3>{log.action}</h3><span className="audit-actor">by <strong>{log.actor}</strong></span><div className="hash-row"><span>PREVIOUS HASH</span><code>{log.previousHash}</code></div><div className="hash-row"><span>CURRENT HASH</span><code>{log.currentHash}</code></div></article>)}</div><div className="drawer-footer"><span>SHA-256 · Append-only event chain</span><button onClick={() => setAuditOpen(false)}>Done</button></div></aside></div>}
+      {auditOpen && <div className="drawer-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setAuditOpen(false); }}><aside className="audit-drawer" role="dialog" aria-modal="true" aria-labelledby="audit-title"><div className="drawer-header"><div><div className="drawer-kicker"><span className="status-dot" /> TAMPER-EVIDENT RECORD</div><h2 id="audit-title">Audit trail</h2><p>Cryptographically linked investigation events.</p></div><button className="icon-button" onClick={() => setAuditOpen(false)} aria-label="Close audit trail">×</button></div><div className="chain-status"><span><strong>Chain integrity verified</strong><small>All {auditLogs.length} entries are linked and unmodified</small></span></div><div className="audit-list">{auditLogs.map((log) => <article className="audit-entry" key={log.id}><div className="audit-entry-heading"><span className="audit-sequence">#{String(log.sequence).padStart(4, "0")}</span><span className="audit-time">{relativeTime(log.timestamp)}</span></div>      <h3>{formatDisplayedAuditAction(log.action)}</h3><span className="audit-actor">by <strong>{log.actor}</strong></span><div className="hash-row"><span>PREVIOUS HASH</span><code>{log.previousHash}</code></div><div className="hash-row"><span>CURRENT HASH</span><code>{log.currentHash}</code></div></article>)}</div><div className="drawer-footer"><span>SHA-256 · Append-only event chain</span><button onClick={() => setAuditOpen(false)}>Done</button></div></aside></div>}
       {selectedAsset && (
         <div className="drawer-backdrop asset-drawer-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedAsset(null); }}>
           <aside className="asset-inspection-drawer" role="dialog" aria-modal="true" aria-labelledby="asset-drawer-title">
@@ -791,6 +791,19 @@ function getAssetTypeLabel(type: string): string {
     case "database": return "Database";
     default: return "Investigation Asset";
   }
+}
+
+function formatDisplayedAuditAction(action: string): string {
+  if (!action.startsWith("ASSET_CONTAINMENT:")) return action;
+  const parts = action.split(":");
+  const allowedActions = new Set(["isolate_host", "revoke_iam", "lock_s3_bucket", "block_network"]);
+  if (parts.length >= 3 && allowedActions.has(parts[2])) {
+    return `Asset Contained: ${parts[1] || "Unknown asset"} (${parts[2]})`;
+  }
+  if (parts.length >= 3 && allowedActions.has(parts[1])) {
+    return `Asset Contained: Asset #${parts[2]} (${parts[1]})`;
+  }
+  return action;
 }
 
 function toAssetScopeStatus(status: string): AssetScopeStatus {

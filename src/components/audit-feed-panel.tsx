@@ -57,6 +57,19 @@ function truncateHash(hash: string): string {
   return hash.length > 12 ? `${hash.slice(0, 4)}...${hash.slice(-4)}` : hash;
 }
 
+function formatAuditAction(action: string): string {
+  if (!action.startsWith("ASSET_CONTAINMENT:")) return action;
+  const parts = action.split(":");
+  const allowedActions = new Set(["isolate_host", "revoke_iam", "lock_s3_bucket", "block_network"]);
+  if (parts.length >= 3 && allowedActions.has(parts[2])) {
+    return `Asset Contained: ${parts[1] || "Unknown asset"} (${parts[2]})`;
+  }
+  if (parts.length >= 3 && allowedActions.has(parts[1])) {
+    return `Asset Contained: Asset #${parts[2]} (${parts[1]})`;
+  }
+  return action;
+}
+
 export function AuditFeedPanel({ activities, auditEntries, incidentId }: AuditFeedPanelProps) {
   const [activeTab, setActiveTab] = useState<PanelTab>("activity");
   const [copiedHash, setCopiedHash] = useState<string | null>(null);
@@ -182,7 +195,7 @@ export function AuditFeedPanel({ activities, auditEntries, incidentId }: AuditFe
                 <span className="audit-log-sequence">#{String(entry.sequenceId)}</span>
                 <time dateTime={isoTimestamp(entry.timestamp)}>{formatTimestamp(entry.timestamp)}</time>
               </div>
-              <h3>{entry.action}</h3>
+              <h3>{formatAuditAction(entry.action)}</h3>
               <div className="audit-hash-row">
                 <span>PREVIOUS HASH</span>
                 <code title={entry.previousHash}>{truncateHash(entry.previousHash)}</code>
