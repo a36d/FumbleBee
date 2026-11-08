@@ -58,6 +58,8 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
   const [selectedAsset, setSelectedAsset] = useState<FrontendAsset | null>(null);
   const assetScopesRef = useRef<Record<string, AssetScopeStatus>>({});
   const [assetScopes, setAssetScopes] = useState<Record<string, AssetScopeStatus>>({});
+  const [liveGraphAssets, setLiveGraphAssets] = useState<FrontendAsset[]>([]);
+  const [liveGraphRelationships, setLiveGraphRelationships] = useState<FrontendRelationship[]>([]);
   const [graph, setGraph] = useState(() => {
     const graphAssets = incident.id === "1" ? seededIncidentAssets : assets;
     const graphRelationships = incident.id === "1" ? seededIncidentRelationships : relationships;
@@ -86,6 +88,14 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
     window.addEventListener("hashchange", focusWorkspaceTarget);
     return () => window.removeEventListener("hashchange", focusWorkspaceTarget);
   }, []);
+
+  useEffect(() => {
+    if (liveGraphAssets.length === 0 && liveGraphRelationships.length === 0) {
+      return;
+    }
+    const formattedGraph = formatAttackGraph(liveGraphAssets, liveGraphRelationships);
+    setGraph(getAttackPathLayout(applyAssetScopes(formattedGraph.nodes), formattedGraph.edges));
+  }, [liveGraphAssets, liveGraphRelationships, assetScopes]);
 
   function applyAssetScopes(nodes: Node[]) {
     return nodes.map((node) => {
@@ -141,6 +151,8 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
       }
 
       setGraph({ nodes: [], edges: [] });
+      setLiveGraphAssets([]);
+      setLiveGraphRelationships([]);
       setAnalysisResult(null);
       setSelectedAsset(null);
       assetScopesRef.current = {};
@@ -285,11 +297,8 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
           targetId: row.targetAssetKey,
           label: row.relationLabel,
         }));
-
-      if (liveAssets.length > 0 || liveRelationships.length > 0) {
-        const formattedGraph = formatAttackGraph(liveAssets, liveRelationships);
-        setGraph(getAttackPathLayout(applyAssetScopes(formattedGraph.nodes), formattedGraph.edges));
-      }
+      setLiveGraphAssets(liveAssets);
+      setLiveGraphRelationships(liveRelationships);
     };
 
     const subscription = connection.subscriptionBuilder()
@@ -334,11 +343,10 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
               const reducers = connection.reducers as unknown as {
                 applyAiAnalysis: (args: Record<string, unknown>) => void;
               };
-              void reducers.applyAiAnalysis(args);
-              return;
+              return reducers.applyAiAnalysis(args);
             }
             const reducers = connection.reducers as unknown as Record<string, (args: Record<string, unknown>) => void>;
-            void reducers[_name]?.(args);
+            return reducers[_name]?.(args);
           },
         },
       },
@@ -407,9 +415,53 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
       await sentinelClient.applyAiAnalysis(routeIncidentId, {
         ...analysis,
       });
+      const analysisAssets = analysis.assets.map((asset): FrontendAsset => ({
+        id: asset.id,
+        name: asset.name,
+        type: asset.type,
+        description: asset.description,
+        riskLabel: asset.riskLabel,
+      }));
+      const analysisRelationships = analysis.edges.map((edge, index): FrontendRelationship => ({
+        id: `${edge.sourceId}-${edge.targetId}-${index}`,
+        sourceId: edge.sourceId,
+        targetId: edge.targetId,
+        label: edge.label,
+      }));
+      setLiveGraphAssets(analysisAssets);
+      setLiveGraphRelationships(analysisRelationships);
       const formattedGraph = formatAttackGraph(analysis.assets, analysis.edges);
       setGraph(getAttackPathLayout(applyAssetScopes(formattedGraph.nodes), formattedGraph.edges));
       setAnalysisResult(analysis);
+
+      for (let attempt = 0; attempt < 12; attempt++) {
+        window.setTimeout(() => {
+          if (!connection) return;
+          const persistedAssets = (Array.from(connection.db.asset.iter()) as LiveAsset[])
+            .filter((row) => row.incidentId === routeIncidentId)
+            .map((row): FrontendAsset => ({
+              id: row.assetKey || row.id.toString(),
+              databaseId: row.id,
+              name: row.name,
+              type: row.assetType as FrontendAsset["type"],
+              description: row.description || "",
+              riskLabel: row.riskLevel,
+              scopeStatus: toAssetScopeStatus(row.compromiseStatus),
+            }));
+          const persistedRelationships = (Array.from(connection.db.relationship.iter()) as LiveRelationship[])
+            .filter((row) => row.incidentId === routeIncidentId)
+            .map((row): FrontendRelationship => ({
+              id: row.id.toString(),
+              sourceId: row.sourceAssetKey,
+              targetId: row.targetAssetKey,
+              label: row.relationLabel,
+            }));
+          if (persistedAssets.length > 0 || persistedRelationships.length > 0) {
+            setLiveGraphAssets(persistedAssets);
+            setLiveGraphRelationships(persistedRelationships);
+          }
+        }, attempt * 200);
+      }
       const event: ActivityFeed = { id: `analysis-${Date.now()}`, incidentId: incident.id, action: "AI analysis completed", actor: "FumbleBee AI", createdAt: new Date().toISOString(), kind: "analysis" };
       setEvents((current) => [event, ...current]);
     } catch (error) {
