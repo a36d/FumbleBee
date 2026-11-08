@@ -27,8 +27,13 @@ type MitigationPlaybook = {
 
 export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
   const { connection } = useSpacetimeConnection();
+  const routeIncidentId = (() => {
+    try { return BigInt(incidentId); } catch { return null; }
+  })();
   const fallbackIncident = useMemo(() => incidents.find((item) => item.id === incidentId) ?? incidents[0], [incidentId]);
   const [liveIncident, setLiveIncident] = useState<FrontendIncident | null>(null);
+  const [missingIncident, setMissingIncident] = useState(false);
+  const incidentSeedAttemptedRef = useRef(false);
   const incident = liveIncident ?? fallbackIncident;
   const [notes, setNotes] = useState(initialNotes.filter((note) => note.incidentId === incident.id));
   const [events, setEvents] = useState(initialActivity.filter((item) => item.incidentId === incident.id));
@@ -165,7 +170,19 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
     if (!connection) return;
     const refreshIncidentAndGraph = () => {
       const incidentRows = Array.from(connection.db.incident.iter()) as LiveIncident[];
-      const liveRow = incidentRows.find((row) => row.id === 1n);
+      const liveRow = routeIncidentId === null
+        ? undefined
+        : incidentRows.find((row) => row.id === routeIncidentId);
+      setMissingIncident(routeIncidentId !== null && !liveRow);
+      if (!liveRow && routeIncidentId === 1n && !incidentSeedAttemptedRef.current) {
+        incidentSeedAttemptedRef.current = true;
+        void connection.reducers.createIncident({
+          title: fallbackIncident.title || "Unusual Bulk Data Access & Privilege Escalation",
+          description: fallbackIncident.description || "Production service account accessed sensitive S3 storage buckets and modified IAM trust policies outside standard business hours.",
+          severity: fallbackIncident.severity || "High",
+          initialNotes: "Spike in egress traffic detected via VPC Flow Logs toward external endpoint.\nIAM Role assume event triggered without corresponding JIRA approval ticket.",
+        });
+      }
       if (liveRow) {
         let recommendations: string[] = [];
         try {
@@ -193,7 +210,7 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
       }
 
       const liveNotes = (Array.from(connection.db.investigationNote.iter()) as LiveNote[])
-        .filter((row) => row.incidentId === 1n)
+        .filter((row) => routeIncidentId !== null && row.incidentId === routeIncidentId)
         .map((row) => ({
           id: row.id.toString(),
           incidentId: row.incidentId.toString(),
@@ -212,7 +229,7 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
       }
 
       const currentActivities = (Array.from(connection.db.activityFeed.iter()) as LiveActivity[])
-        .filter((row) => row.incidentId === 1n)
+        .filter((row) => routeIncidentId !== null && row.incidentId === routeIncidentId)
         .map((row): AuditFeedActivity => ({
           id: row.id,
           actorName: row.actorName,
@@ -235,7 +252,7 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
       setLiveAuditEntries(currentAuditEntries);
 
       const liveAssets = (Array.from(connection.db.asset.iter()) as LiveAsset[])
-        .filter((row) => row.incidentId === 1n)
+        .filter((row) => routeIncidentId !== null && row.incidentId === routeIncidentId)
         .map((row): FrontendAsset => {
           const scopeStatus = toAssetScopeStatus(row.compromiseStatus);
           return {
@@ -258,7 +275,7 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
         : null);
 
       const liveRelationships = (Array.from(connection.db.relationship.iter()) as LiveRelationship[])
-        .filter((row) => row.incidentId === 1n)
+        .filter((row) => routeIncidentId !== null && row.incidentId === routeIncidentId)
         .map((row): FrontendRelationship => ({
           id: row.id.toString(),
           sourceId: row.sourceAssetKey,
@@ -348,10 +365,16 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
         connection.db.auditLog.removeOnDelete(refreshOnTableChange);
       }
     };
-  }, [connection, fallbackIncident]);
+  }, [connection, fallbackIncident, incidentId, routeIncidentId]);
 
   async function runAnalysis() {
     if (analysisRunning) return;
+    if (routeIncidentId === null || missingIncident) {
+      setAnalysisError(routeIncidentId === null
+        ? "Invalid incident ID. Declare the incident from the Incident Command Hub."
+        : `Incident #${routeIncidentId.toString()} has not been created yet. Declare it from /incidents first.`);
+      return;
+    }
     setAnalysisRunning(true);
     setAnalysisError("");
     try {
@@ -359,6 +382,7 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          incidentId: routeIncidentId.toString(),
           title: incident.title,
           description: incident.description,
           notes: notes.map((note) => note.content),
@@ -377,7 +401,7 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
       if (!sentinelClient) {
         throw new Error("SpacetimeDB client is not connected.");
       }
-      await sentinelClient.applyAiAnalysis(1n, {
+      await sentinelClient.applyAiAnalysis(routeIncidentId, {
         ...analysis,
       });
       const formattedGraph = formatAttackGraph(analysis.assets, analysis.edges);
@@ -459,7 +483,8 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
     if (resolvedAssetId === undefined) {
       for (let attempt = 0; attempt < 8 && resolvedAssetId === undefined; attempt++) {
         const liveRows = Array.from(connection.db.asset.iter()) as LiveAsset[];
-        const incidentAssets = liveRows.filter((row) => row.incidentId === 1n);
+        const incidentAssets = liveRows.filter((row) =>
+          routeIncidentId !== null && row.incidentId === routeIncidentId);
         const normalizedName = selectedAsset.name.trim().toLowerCase();
         const normalizedType = selectedAsset.type.trim().toLowerCase();
         const matchedAsset = incidentAssets.find((row) => row.assetKey === selectedAsset.id)
@@ -631,6 +656,14 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
         </div>
         <div className="heading-actions"><button className="button button-secondary" onClick={() => setAuditOpen(true)}>Audit trail</button><button className="button button-reset" onClick={resetDemoState} disabled={resetRunning || analysisRunning}>{resetRunning && <LoaderCircle className="spin" size={15} />}{resetRunning ? "Resetting..." : "Reset Demo"}</button><div className="export-report-control"><select aria-label="Forensic report format" value={exportFormat} onChange={(event) => setExportFormat(event.target.value as "markdown" | "json")} disabled={exportRunning}><option value="markdown">Markdown (.md)</option><option value="json">Raw JSON (.json)</option></select><button className="button button-primary" onClick={() => void exportForensicReport()} disabled={exportRunning}>{exportRunning ? "Preparing report..." : "Export Forensic Report"}</button></div><button className="button button-primary" onClick={runAnalysis} disabled={analysisRunning || resetRunning}>{analysisRunning && <LoaderCircle className="spin" size={16} />}{analysisRunning ? "Analyzing..." : "Run AI analysis"}</button></div>
       </div>
+      {missingIncident && (
+        <p className="analysis-error" role="alert">
+          This incident has not been created in SpacetimeDB yet.{" "}
+          {routeIncidentId === 1n
+            ? "Attempting to seed the default demo incident."
+            : <><Link href="/incidents">Declare it from the Incident Command Hub</Link> before running AI analysis.</>}
+        </p>
+      )}
       {analysisError && <p className="analysis-error" role="alert">{analysisError}</p>}
       {exportError && <p className="analysis-error" role="alert">{exportError}</p>}
       {resetNotice && <p className="reset-notice" role="status">{resetNotice}</p>}
