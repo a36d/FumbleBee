@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, Clipboard, ClipboardCheck, LoaderCircle, ShieldCheck, X } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import type { Node } from "@xyflow/react";
 import { createSentinelGraphClient, formatAttackGraph, type AiAnalysisInput } from "@/sdk/src/index";
 import {
@@ -16,6 +17,7 @@ import { AttackGraph } from "@/components/attack-graph";
 import { AuditFeedPanel, type AuditFeedActivity, type AuditFeedEntry } from "@/components/audit-feed-panel";
 import { SeverityBadge, StatusBadge } from "@/components/severity-badge";
 import { useSpacetimeConnection } from "@/components/spacetime-connection-provider";
+import { normalizeRole } from "@/lib/roles";
 
 type MitigationPlaybook = {
   assetId: string;
@@ -26,13 +28,18 @@ type MitigationPlaybook = {
 };
 
 export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
-  const { connection } = useSpacetimeConnection();
+  const { connection, responderSession, sessionLoaded } = useSpacetimeConnection();
+  const router = useRouter();
+  const isEmployee = sessionLoaded && normalizeRole(responderSession?.role) === "Employee";
+  const incidentListPath = isEmployee ? "/personal-incidents" : "/incidents";
   const routeIncidentId = (() => {
     try { return BigInt(incidentId); } catch { return null; }
   })();
   const fallbackIncident = useMemo(() => incidents.find((item) => item.id === incidentId) ?? incidents[0], [incidentId]);
   const [liveIncident, setLiveIncident] = useState<FrontendIncident | null>(null);
   const [missingIncident, setMissingIncident] = useState(false);
+  const [employeeAccessVerified, setEmployeeAccessVerified] = useState(false);
+  const [employeeHasAccess, setEmployeeHasAccess] = useState(false);
   const incidentSeedAttemptedRef = useRef(false);
   const incident = liveIncident ?? fallbackIncident;
   const [notes, setNotes] = useState(initialNotes.filter((note) => note.incidentId === incident.id));
@@ -179,14 +186,36 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
   }
 
   useEffect(() => {
-    if (!connection) return;
+    if (!sessionLoaded) return;
+    if (!connection) {
+      if (isEmployee) {
+        setEmployeeAccessVerified(true);
+        setEmployeeHasAccess(false);
+        router.replace("/personal-incidents");
+      }
+      return;
+    }
     const refreshIncidentAndGraph = () => {
       const incidentRows = Array.from(connection.db.incident.iter()) as LiveIncident[];
       const liveRow = routeIncidentId === null
         ? undefined
         : incidentRows.find((row) => row.id === routeIncidentId);
       setMissingIncident(routeIncidentId !== null && !liveRow);
-      if (!liveRow && routeIncidentId === 1n && !incidentSeedAttemptedRef.current) {
+      if (isEmployee) {
+        const username = responderSession?.username.trim().toLowerCase();
+        const hasAccess = Boolean(
+          username &&
+          liveRow &&
+          (liveRow.owner.trim().toLowerCase() === username || liveRow.assignedTo.trim().toLowerCase() === username),
+        );
+        setEmployeeAccessVerified(true);
+        setEmployeeHasAccess(hasAccess);
+        if (!hasAccess) {
+          router.replace("/personal-incidents");
+          return;
+        }
+      }
+      if (!isEmployee && !liveRow && routeIncidentId === 1n && !incidentSeedAttemptedRef.current) {
         incidentSeedAttemptedRef.current = true;
         void connection.reducers.createIncident({
           title: fallbackIncident.title || "Unusual Bulk Data Access & Privilege Escalation",
@@ -376,14 +405,14 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
         connection.db.auditLog.removeOnDelete(refreshOnTableChange);
       }
     };
-  }, [connection, fallbackIncident, incidentId, routeIncidentId]);
+  }, [connection, fallbackIncident, incidentId, isEmployee, responderSession?.username, routeIncidentId, router, sessionLoaded]);
 
   async function runAnalysis() {
     if (analysisRunning) return;
     if (routeIncidentId === null || missingIncident) {
       setAnalysisError(routeIncidentId === null
         ? "Invalid incident ID. Declare the incident from the Incident Command Hub."
-        : `Incident #${routeIncidentId.toString()} has not been created yet. Declare it from /incidents first.`);
+        : `Incident #${routeIncidentId.toString()} has not been created yet. Return to ${incidentListPath} first.`);
       return;
     }
     setAnalysisRunning(true);
@@ -702,12 +731,20 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
     setNoteText("");
   }
 
+  if (!sessionLoaded) {
+    return <div className="incident-hub-empty"><strong>Loading responder access...</strong></div>;
+  }
+  if (isEmployee && !employeeAccessVerified) {
+    return <div className="incident-hub-empty"><strong>Verifying incident assignment...</strong></div>;
+  }
+  if (isEmployee && !employeeHasAccess) return null;
+
   return (
     <>
       <div className="investigation-heading">
         <div className="investigation-title-panel">
           <div className="investigation-heading-copy">
-            <div className="eyebrow"><span className="eyebrow-line" /><Link href="/incidents" className="heading-back-link">Security Incidents</Link><span className="meta-dot">/</span><span>Incident #{incident.id}</span></div>
+            <div className="eyebrow"><span className="eyebrow-line" /><Link href={incidentListPath} className="heading-back-link">{isEmployee ? "Personal Incidents" : "Security Incidents"}</Link><span className="meta-dot">/</span><span>Incident #{incident.id}</span></div>
             <h1>{incident.title}</h1>
             <div className="investigation-meta"><span>Subject: <strong>{incident.subjectName}</strong></span><StatusBadge status={incident.status} /><SeverityBadge severity={findings.severity} /></div>
           </div>
@@ -719,7 +756,7 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
           This incident has not been created in SpacetimeDB yet.{" "}
           {routeIncidentId === 1n
             ? "Attempting to seed the default demo incident."
-            : <><Link href="/incidents">Declare it from the Incident Command Hub</Link> before running AI analysis.</>}
+            : <><Link href={incidentListPath}>Return to {isEmployee ? "Personal Incidents" : "Security Incidents"}</Link> before running AI analysis.</>}
         </p>
       )}
       {analysisError && <p className="analysis-error" role="alert">{analysisError}</p>}

@@ -5,11 +5,12 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { ArrowRight, Plus, X } from "lucide-react";
 import { tables } from "@/generated/spacetimedb";
-import type { ActivityFeed as LiveActivity, Incident as LiveIncident } from "@/generated/spacetimedb/types";
+import type { ActivityFeed as LiveActivity, Incident as LiveIncident, User as LiveUser } from "@/generated/spacetimedb/types";
 import { SeverityBadge, StatusBadge } from "@/components/severity-badge";
 import { useSpacetimeConnection } from "@/components/spacetime-connection-provider";
 import { incidents as demoIncidents } from "@/lib/mock-data";
 import type { Incident as FrontendIncident, Severity } from "@/lib/types";
+import { normalizeRole } from "@/lib/roles";
 
 const riskTone = (score: number) => score >= 85 ? "risk-critical" : score >= 70 ? "risk-high" : score >= 45 ? "risk-medium" : "risk-low";
 type IncidentSortKey = "title" | "severity" | "riskScore" | "classification" | "status" | "lastUpdated";
@@ -21,15 +22,19 @@ type HubIncident = {
   riskScore: number;
   classification: string;
   status: string;
+  owner: string;
+  assignedTo: string;
+  isLive: boolean;
   createdAt: Date;
   lastUpdated: Date;
 };
 
-export function IncidentHub() {
+export function IncidentHub({ personalOnly = false }: { personalOnly?: boolean }) {
   const router = useRouter();
-  const { connection, connectionError } = useSpacetimeConnection();
+  const { connection, connectionError, responderSession } = useSpacetimeConnection();
   const [incidents, setIncidents] = useState<LiveIncident[]>([]);
   const [activities, setActivities] = useState<LiveActivity[]>([]);
+  const [responders, setResponders] = useState<LiveUser[]>([]);
   const [createOpen, setCreateOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
@@ -40,6 +45,7 @@ export function IncidentHub() {
     if (!connection) {
       setIncidents([]);
       setActivities([]);
+      setResponders([]);
       return;
     }
 
@@ -51,6 +57,9 @@ export function IncidentHub() {
     const refreshActivities = () => {
       if (active) setActivities(Array.from(connection.db.activityFeed.iter()) as LiveActivity[]);
     };
+    const refreshResponders = () => {
+      if (active) setResponders(Array.from(connection.db.user.iter()) as LiveUser[]);
+    };
 
     connection.db.incident.onInsert(refreshIncidents);
     connection.db.incident.onUpdate(refreshIncidents);
@@ -58,15 +67,19 @@ export function IncidentHub() {
     connection.db.activityFeed.onInsert(refreshActivities);
     connection.db.activityFeed.onUpdate(refreshActivities);
     connection.db.activityFeed.onDelete(refreshActivities);
+    connection.db.user.onInsert(refreshResponders);
+    connection.db.user.onUpdate(refreshResponders);
+    connection.db.user.onDelete(refreshResponders);
     const subscription = connection.subscriptionBuilder()
       .onApplied(() => {
         refreshIncidents();
         refreshActivities();
+        refreshResponders();
       })
       .onError((context) => {
         if (active) setError(`Could not subscribe to incidents: ${context.event?.message ?? "unknown subscription error"}`);
       })
-      .subscribe([tables.incident, tables.activityFeed]);
+      .subscribe([tables.incident, tables.activityFeed, tables.user]);
 
     return () => {
       active = false;
@@ -76,6 +89,9 @@ export function IncidentHub() {
       connection.db.activityFeed.removeOnInsert(refreshActivities);
       connection.db.activityFeed.removeOnUpdate(refreshActivities);
       connection.db.activityFeed.removeOnDelete(refreshActivities);
+      connection.db.user.removeOnInsert(refreshResponders);
+      connection.db.user.removeOnUpdate(refreshResponders);
+      connection.db.user.removeOnDelete(refreshResponders);
       subscription.unsubscribe();
     };
   }, [connection]);
@@ -102,6 +118,9 @@ export function IncidentHub() {
             riskScore: Number(incident.riskScore),
             classification: incident.classification || "Pending Analysis",
             status: incident.status,
+            owner: incident.owner,
+            assignedTo: incident.assignedTo,
+            isLive: true,
             createdAt,
             lastUpdated: latestActivityByIncident.get(incident.id.toString()) ?? createdAt,
           };
@@ -114,11 +133,23 @@ export function IncidentHub() {
           riskScore: incident.riskScore,
           classification: incident.threatClassification || "Pending Analysis",
           status: incident.status,
+          owner: "",
+          assignedTo: "",
+          isLive: false,
           createdAt: new Date(incident.createdAt),
           lastUpdated: new Date(incident.createdAt),
         }));
 
-    return source.sort((left, right) => {
+    const username = responderSession?.username.trim().toLowerCase();
+    const visible = personalOnly
+      ? username
+        ? source.filter((incident) =>
+            incident.owner.trim().toLowerCase() === username ||
+            incident.assignedTo.trim().toLowerCase() === username,
+          )
+        : []
+      : source;
+    return visible.sort((left, right) => {
       const compare = (() => {
         switch (sortKey) {
           case "title":
@@ -137,7 +168,7 @@ export function IncidentHub() {
       })();
       return sortDirection === "asc" ? compare : -compare;
     });
-  }, [incidents, latestActivityByIncident, sortDirection, sortKey]);
+  }, [incidents, latestActivityByIncident, personalOnly, responderSession?.username, sortDirection, sortKey]);
   const activeIncidents = useMemo(
     () => displayIncidents.filter((incident) => !["closed", "contained"].includes(incident.status.toLowerCase())),
     [displayIncidents],
@@ -145,6 +176,11 @@ export function IncidentHub() {
   const criticalCount = useMemo(
     () => activeIncidents.filter((incident) => incident.severity.toLowerCase() === "critical").length,
     [activeIncidents],
+  );
+  const canDeclare = !personalOnly && normalizeRole(responderSession?.role) === "Admin";
+  const employeeResponders = useMemo(
+    () => responders.filter((responder) => normalizeRole(responder.role) === "Employee"),
+    [responders],
   );
 
   function changeSort(nextKey: IncidentSortKey) {
@@ -154,6 +190,23 @@ export function IncidentHub() {
     }
     setSortKey(nextKey);
     setSortDirection(nextKey === "lastUpdated" ? "desc" : "asc");
+  }
+
+  async function assignIncident(incidentId: string, assigneeUsername: string) {
+    if (!connection) {
+      setError(connectionError || "SpacetimeDB is not connected. Try again when the connection is restored.");
+      return;
+    }
+    if (!assigneeUsername) return;
+    setError("");
+    try {
+      await connection.reducers.assignIncident({
+        incidentId: BigInt(incidentId),
+        assigneeUsername,
+      });
+    } catch (assignError) {
+      setError(assignError instanceof Error ? assignError.message : "Incident assignment failed.");
+    }
   }
 
   async function declareIncident(formData: FormData) {
@@ -237,34 +290,34 @@ export function IncidentHub() {
     <>
       <section className="incident-hub-banner">
         <div className="incident-hub-heading">
-          <div className="eyebrow"><span className="eyebrow-line" /> SOVEREIGN RESPONSE ENVIRONMENT</div>
-          <h1>Security Incidents</h1>
-          <p>Live incident operations across your organization.</p>
+          <div className="eyebrow"><span className="eyebrow-line" /> {personalOnly ? "ASSIGNED RESPONSE QUEUE" : "SOVEREIGN RESPONSE ENVIRONMENT"}</div>
+          <h1>{personalOnly ? "Personal Incidents" : "Security Incidents"}</h1>
+          <p>{personalOnly ? "Incidents assigned to your responder account." : "Live incident operations across your organization."}</p>
         </div>
-        <div className="incident-hub-metrics">
+        {!personalOnly && <div className="incident-hub-metrics">
           <div className="hub-metric-chip"><span>Total Active Incidents</span><strong>{activeIncidents.length}</strong></div>
           <div className="hub-metric-chip hub-critical-chip"><span>Critical Severity</span><strong>{criticalCount}</strong></div>
           <div className="hub-metric-chip hub-health-chip"><span>System Health</span><strong>Sovereign / Air-Gapped</strong></div>
-        </div>
+        </div>}
       </section>
 
       <div className="page-heading incident-list-heading">
         <div>
           <div className="eyebrow"><span className="eyebrow-line" /> INCIDENT OPERATIONS</div>
-          <h2>All incidents</h2>
-          <p className="page-subtitle">Monitor severity, risk, and investigation status in real time.</p>
+          <h2>{personalOnly ? "Your assigned incidents" : "All incidents"}</h2>
+          <p className="page-subtitle">{personalOnly ? "Only incidents owned by or assigned to your username appear here." : "Monitor severity, risk, and investigation status in real time."}</p>
         </div>
-        <button className="button button-primary" onClick={() => { setError(""); setCreateOpen(true); }}>
+        {canDeclare && <button className="button button-primary" onClick={() => { setError(""); setCreateOpen(true); }}>
           <Plus size={15} /> Declare New Incident
-        </button>
+        </button>}
       </div>
 
       {(error || connectionError) && <p className="analysis-error" role="alert">{error || connectionError}</p>}
 
       <section className="panel incident-hub-panel">
         <div className="panel-heading">
-          <div><div className="section-title-row"><h2>Incident register</h2><span className="count-pill">{displayIncidents.length}</span></div><p>{incidents.length ? "Live SpacetimeDB incidents. Select a column heading to sort." : "Demo incidents are shown until live records are available. Select a column heading to sort."}</p></div>
-          <Link className="hub-overview-link" href="/">Security overview</Link>
+          <div><div className="section-title-row"><h2>{personalOnly ? "Assigned incident register" : "Incident register"}</h2><span className="count-pill">{displayIncidents.length}</span></div><p>{incidents.length ? "Live SpacetimeDB incidents. Select a column heading to sort." : personalOnly ? "Personal incident assignments are loaded from your live account records." : "Demo incidents are shown until live records are available. Select a column heading to sort."}</p></div>
+          {!personalOnly && <Link className="hub-overview-link" href="/">Security overview</Link>}
         </div>
         {displayIncidents.length ? (
           <div className="table-wrap">
@@ -276,6 +329,7 @@ export function IncidentHub() {
                 <th aria-sort={sortKey === "classification" ? sortDirection === "asc" ? "ascending" : "descending" : "none"}><button className="incident-sort-button" onClick={() => changeSort("classification")}>CLASSIFICATION{sortKey === "classification" && <span>{sortDirection === "asc" ? "↑" : "↓"}</span>}</button></th>
                 <th aria-sort={sortKey === "status" ? sortDirection === "asc" ? "ascending" : "descending" : "none"}><button className="incident-sort-button" onClick={() => changeSort("status")}>STATUS{sortKey === "status" && <span>{sortDirection === "asc" ? "↑" : "↓"}</span>}</button></th>
                 <th aria-sort={sortKey === "lastUpdated" ? sortDirection === "asc" ? "ascending" : "descending" : "none"}><button className="incident-sort-button" onClick={() => changeSort("lastUpdated")}>LAST UPDATED{sortKey === "lastUpdated" && <span>{sortDirection === "asc" ? "↑" : "↓"}</span>}</button></th>
+                {!personalOnly && <th>ASSIGNED TO</th>}
                 <th />
               </tr></thead>
               <tbody>
@@ -289,6 +343,21 @@ export function IncidentHub() {
                       <td data-label="Classification"><span className="hub-classification">{incident.classification}</span></td>
                       <td data-label="Status"><StatusBadge status={normalizeStatus(incident.status)} /></td>
                       <td data-label="Last updated" className="created-cell">{new Intl.DateTimeFormat("en", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" }).format(incident.lastUpdated)}</td>
+                      {!personalOnly && <td data-label="Assigned to">
+                        {canDeclare && incident.isLive ? (
+                          <select
+                            className="incident-assignee-select"
+                            value={incident.assignedTo}
+                            aria-label={`Assign incident ${incident.id}`}
+                            onChange={(event) => void assignIncident(incident.id, event.target.value)}
+                          >
+                            <option value="">{incident.owner || "Unassigned"}</option>
+                            {employeeResponders.map((responder) => (
+                              <option key={responder.username} value={responder.username}>{responder.username}</option>
+                            ))}
+                          </select>
+                        ) : <span>{incident.assignedTo || incident.owner || "Unassigned"}</span>}
+                      </td>}
                       <td data-label="Open"><Link className="row-action" href={`/investigations/${incident.id}`} aria-label={`Open incident ${incident.id}`}><ArrowRight size={16} /></Link></td>
                     </tr>
                   );
@@ -298,8 +367,8 @@ export function IncidentHub() {
           </div>
         ) : (
           <div className="incident-hub-empty">
-            <strong>{connection ? "No incidents are available." : "Connecting to the incident register..."}</strong>
-            <span>{connection ? "Declare a new incident to begin a live investigation." : connectionError || "Waiting for the SpacetimeDB connection."}</span>
+            <strong>{personalOnly ? "No personal incidents assigned" : connection ? "No incidents are available." : "Connecting to the incident register..."}</strong>
+            <span>{personalOnly ? "Incidents you own or that are assigned to your username will appear here." : connection ? "Declare a new incident to begin a live investigation." : connectionError || "Waiting for the SpacetimeDB connection."}</span>
           </div>
         )}
       </section>

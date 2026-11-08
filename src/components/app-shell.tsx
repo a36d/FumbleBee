@@ -12,6 +12,7 @@ import { useSpacetimeConnection } from "@/components/spacetime-connection-provid
 import { tables } from "@/generated/spacetimedb";
 import type { AuditLog as LiveAuditLog, Incident as LiveIncident } from "@/generated/spacetimedb/types";
 import { incidents as demoIncidents } from "@/lib/mock-data";
+import { normalizeRole } from "@/lib/roles";
 
 interface InvestigationTab {
   id: string;
@@ -20,14 +21,16 @@ interface InvestigationTab {
 
 const maxInvestigationTabs = 5;
 
-function WorkspaceNavigation({ isInvestigation, isIncidents, incidentId }: {
+function WorkspaceNavigation({ isInvestigation, isIncidents, isPersonalIncidents, incidentId }: {
   isInvestigation: boolean;
   isIncidents: boolean;
+  isPersonalIncidents: boolean;
   incidentId: string | null;
 }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { connection } = useSpacetimeConnection();
+  const { connection, responderSession, sessionLoaded } = useSpacetimeConnection();
+  const isAdmin = sessionLoaded && normalizeRole(responderSession?.role) === "Admin";
   const [tabs, setTabs] = useState<InvestigationTab[]>([]);
   const [incidentTitles, setIncidentTitles] = useState<Record<string, string>>({});
 
@@ -82,14 +85,15 @@ function WorkspaceNavigation({ isInvestigation, isIncidents, incidentId }: {
     setTabs(next);
     if (pathname === `/investigations/${id}`) {
       const nextTab = next[Math.min(index, next.length - 1)];
-      router.push(nextTab ? `/investigations/${nextTab.id}` : "/incidents");
+      router.push(nextTab ? `/investigations/${nextTab.id}` : isAdmin ? "/incidents" : "/personal-incidents");
     }
   }
 
   return (
     <nav className="main-nav">
-      <Link className={`nav-item ${!isInvestigation && !isIncidents ? "active" : ""}`} href="/">Overview</Link>
-      <Link className={`nav-item ${isInvestigation || isIncidents ? "active" : ""}`} href="/incidents">Security Incidents</Link>
+      {isAdmin && <Link className={`nav-item ${!isInvestigation && !isIncidents && !isPersonalIncidents ? "active" : ""}`} href="/">Overview</Link>}
+      <Link className={`nav-item ${isPersonalIncidents || (isInvestigation && !isAdmin) ? "active" : ""}`} href="/personal-incidents">Personal Incidents</Link>
+      {isAdmin && <Link className={`nav-item ${isInvestigation || isIncidents ? "active" : ""}`} href="/incidents">Security Incidents</Link>}
       {tabs.length > 0 && (
         <div className="investigation-tabs" aria-label="Open investigations">
           {tabs.map((tab) => (
@@ -223,15 +227,32 @@ function NotificationBell() {
 }
 
 export function AppShell({ children }: { children: React.ReactNode }) {
+  return (
+    <SpacetimeConnectionProvider>
+      <AppShellContent>{children}</AppShellContent>
+    </SpacetimeConnectionProvider>
+  );
+}
+
+function AppShellContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
+  const { responderSession, sessionLoaded } = useSpacetimeConnection();
   const isInvestigation = pathname.startsWith("/investigations/");
   const isIncidents = pathname === "/incidents";
+  const isPersonalIncidents = pathname === "/personal-incidents";
   const investigationMatch = pathname.match(/^\/investigations\/([^/?#]+)/);
   const incidentId = investigationMatch?.[1] ?? null;
+  const isEmployee = sessionLoaded && normalizeRole(responderSession?.role) === "Employee";
+
+  useEffect(() => {
+    if (isEmployee && (pathname === "/" || pathname === "/incidents")) {
+      router.replace("/personal-incidents");
+    }
+  }, [isEmployee, pathname, router]);
   const [authOpenToken, setAuthOpenToken] = useState(0);
 
   return (
-    <SpacetimeConnectionProvider>
     <div className="app-shell">
       <aside className="sidebar">
         <Link href="/" className="brand">
@@ -249,7 +270,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <ChevronDown size={14} />
         </button>
         <div className="nav-label">WORKSPACE</div>
-        <WorkspaceNavigation isInvestigation={isInvestigation} isIncidents={isIncidents} incidentId={incidentId} />
+        <WorkspaceNavigation isInvestigation={isInvestigation} isIncidents={isIncidents} isPersonalIncidents={isPersonalIncidents} incidentId={incidentId} />
         <div className="sidebar-bottom">
           <div className="system-status"><span className="status-dot" /><span><strong>All systems operational</strong><small>Last synced just now</small></span></div>
           <ProfileDialog />
@@ -257,7 +278,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </aside>
       <div className="main-column">
         <header className="topbar">
-          <div className="breadcrumbs"><span>Workspace</span><span className="crumb-slash">/</span><strong>{isInvestigation ? "Investigation" : isIncidents ? "Security Incidents" : "Overview"}</strong></div>
+          <div className="breadcrumbs"><span>Workspace</span><span className="crumb-slash">/</span><strong>{isInvestigation ? "Investigation" : isPersonalIncidents ? "Personal Incidents" : isIncidents ? "Security Incidents" : "Overview"}</strong></div>
           <div className="topbar-actions">
             <NotificationBell />
             <div className="topbar-divider" />
@@ -267,6 +288,5 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <main className="page-content">{children}</main>
       </div>
     </div>
-    </SpacetimeConnectionProvider>
   );
 }
