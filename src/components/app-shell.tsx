@@ -10,6 +10,7 @@ import { SpacetimeConnectionProvider } from "@/components/spacetime-connection-p
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const isInvestigation = pathname.startsWith("/investigations/");
+  const isIncidents = pathname === "/incidents";
 
   return (
     <SpacetimeConnectionProvider>
@@ -22,8 +23,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <div className="workspace-switch"><span className="workspace-icon">A</span><span className="workspace-copy"><strong>Acme Corporation</strong><small>Enterprise workspace</small></span><ChevronDown size={14} /></div>
         <div className="nav-label">WORKSPACE</div>
         <nav className="main-nav">
-          <Link className={`nav-item ${!isInvestigation ? "active" : ""}`} href="/">Overview</Link>
-          <Link className={`nav-item ${isInvestigation ? "active" : ""}`} href="/investigations/1">Investigations <span className="nav-count">12</span></Link>
+          <Link className={`nav-item ${!isInvestigation && !isIncidents ? "active" : ""}`} href="/">Overview</Link>
+          <Link className={`nav-item ${isInvestigation || isIncidents ? "active" : ""}`} href="/incidents">Incident Command Hub</Link>
           <a className="nav-item" href="#activity">Attack graph</a>
           <a className="nav-item" href="#audit">Audit trail</a>
         </nav>
@@ -34,7 +35,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </aside>
       <div className="main-column">
         <header className="topbar">
-          <div className="breadcrumbs"><span>Workspace</span><span className="crumb-slash">/</span><strong>{isInvestigation ? "Investigation" : "Overview"}</strong></div>
+          <div className="breadcrumbs"><span>Workspace</span><span className="crumb-slash">/</span><strong>{isInvestigation ? "Investigation" : isIncidents ? "Incident Command Hub" : "Overview"}</strong></div>
           <div className="topbar-actions"><button className="search-trigger"><span>Search anything...</span><kbd><Command size={11} /> K</kbd></button><button className="icon-button notification-button" aria-label="Notifications"><Bell size={17} /><i /></button><div className="topbar-divider" /><AuthModal /></div>
         </header>
         <main className="page-content">{children}</main>

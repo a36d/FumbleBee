@@ -998,6 +998,58 @@ body { color: var(--text); }
 .risk-score.risk-high,
 .risk-score.risk-critical { color: var(--alert-strong); }
 
+.incident-hub-banner { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin-bottom: 30px; padding: 22px 24px; border: 1px solid #638286; border-radius: 8px; background: linear-gradient(110deg, #95b0b0, #88a9aa 72%); box-shadow: 0 8px 24px rgba(16, 47, 53, .12); }
+.incident-hub-heading h1 { margin: 10px 0 6px; color: #173f45; font-size: 24px; font-weight: 700; letter-spacing: -.5px; }
+.incident-hub-heading p { margin: 0; color: #173f45; font-size: 11px; }
+.incident-hub-metrics { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 9px; }
+.hub-metric-chip { display: grid; gap: 6px; min-width: 115px; padding: 10px 12px; border: 1px solid rgba(23, 63, 69, .32); border-radius: 5px; background: rgba(203, 217, 213, .24); }
+.hub-metric-chip span { color: #173f45; font-size: 8px; font-weight: 700; letter-spacing: .45px; text-transform: uppercase; }
+.hub-metric-chip strong { color: #102f35; font-size: 16px; }
+.hub-critical-chip strong { color: #963c31; }
+.hub-health-chip strong { color: #28666e; font-size: 11px; }
+.incident-list-heading { margin-top: 0; }
+.incident-list-heading h2 { margin: 8px 0 4px; color: #cbd9d5; font-size: 19px; }
+.incident-list-heading > div > .eyebrow { color: #3c686d; }
+.incident-hub-panel { overflow: hidden; }
+.incident-hub-panel .panel-heading { align-items: center; }
+.incident-hub-panel .panel-heading p { margin-bottom: 0; }
+.hub-overview-link { color: #173f45; font-size: 10px; font-weight: 600; }
+.hub-overview-link:hover, .hub-incident-title:hover { color: #806b2a; }
+.incident-hub-table { min-width: 850px; }
+.incident-hub-table th { white-space: nowrap; }
+.incident-hub-table td { vertical-align: middle; }
+.incident-hub-table td:first-child { min-width: 200px; }
+.hub-incident-title { display: flex; align-items: baseline; gap: 8px; color: #173f45; font-size: 11px; font-weight: 700; }
+.hub-incident-title > span { flex: 0 0 auto; color: #3c686d; font-size: 9px; font-weight: 600; }
+.hub-incident-subject { display: block; margin: 5px 0 0 35px; color: #3c686d; font-size: 9px; }
+.hub-risk-meter { display: grid; grid-template-columns: 39px minmax(52px, 1fr); align-items: center; gap: 7px; }
+.hub-risk-meter .risk-score { font-size: 10px; }
+.hub-risk-meter .risk-score small { color: #3c686d; font-size: 8px; font-weight: 500; }
+.hub-risk-meter > i { height: 4px; overflow: hidden; border-radius: 99px; background: #95b0b0; }
+.hub-risk-meter > i > span { display: block; height: 100%; border-radius: inherit; background: #28666e; }
+.hub-risk-meter > i > .risk-medium { background: #987b20; }
+.hub-risk-meter > i > .risk-high, .hub-risk-meter > i > .risk-critical { background: #963c31; }
+.hub-classification { color: #173f45; font-size: 10px; }
+.incident-hub-empty { display: grid; justify-items: center; gap: 7px; padding: 40px 18px; text-align: center; }
+.incident-hub-empty strong { color: #173f45; font-size: 12px; }
+.incident-hub-empty span { color: #3c686d; font-size: 10px; }
+.incident-create-modal .modal-heading { margin-bottom: 6px; }
+.incident-create-modal .modal-form select { width: 100%; padding: 9px 10px; border: 1px solid #88a9aa; border-radius: 5px; outline: 0; background: #cbd9d5; color: #173f45; font-size: 10px; }
+.incident-create-modal .modal-form select:focus { border-color: #806b2a; box-shadow: 0 0 0 2px rgba(213, 187, 82, .25); }
+.incident-create-modal .modal-actions { display: flex; justify-content: flex-end; gap: 8px; padding-top: 4px; }
+.incident-create-modal .modal-actions .button-secondary { background: #28585e; }
+
+@media (max-width: 900px) {
+  .incident-hub-banner { align-items: flex-start; flex-direction: column; }
+  .incident-hub-metrics { justify-content: flex-start; }
+}
+@media (max-width: 650px) {
+  .incident-hub-banner { margin-bottom: 22px; padding: 17px; }
+  .incident-hub-heading h1 { font-size: 20px; }
+  .hub-metric-chip { min-width: 0; flex: 1 1 42%; }
+  .incident-list-heading { align-items: stretch; }
+}
+
 .audit-feed-tabs { background: #adbfbd; }
 .audit-feed-tab {
   color: #173f45;
