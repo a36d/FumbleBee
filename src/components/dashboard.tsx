@@ -205,13 +205,13 @@ export function Dashboard() {
         <MetricCard
           label="Active investigations"
           value={String(liveIncidents.filter((incident) => incident.status.toLowerCase() !== "resolved").length)}
-          change="Live"
+          change=""
           changeLabel="across organization"
         />
         <MetricCard
           label="High-risk users / responders"
           value={String(liveUsers.filter((user) => user.role.toLowerCase() !== "viewer").length)}
-          change="Live"
+          change=""
           changeLabel="active responders"
         />
         <MetricCard
@@ -220,13 +220,13 @@ export function Dashboard() {
             const status = asset.compromiseStatus.toLowerCase();
             return status === "at-risk" || status === "at_risk" || status === "high" || status === "critical";
           }).length || (liveAssets.length ? liveAssets.length : 0))}
-          change="Live"
+          change=""
           changeLabel="asset inventory"
         />
         <MetricCard
           label="Recent alerts"
           value={String(liveAuditLogs.length)}
-          change="Live"
+          change=""
           changeLabel="audit events"
         />
       </div>
@@ -276,7 +276,7 @@ export function Dashboard() {
         <section className="panel mini-panel"><div className="mini-title"><div><h3>Threat activity</h3><span>Last 7 days</span></div></div><div className="activity-chart" aria-label="Threat activity trend chart"><div className="chart-y-labels"><span>40</span><span>20</span><span>0</span></div><div className="chart-plot"><div className="chart-gridline one" /><div className="chart-gridline two" /><div className="chart-bars">{[28, 42, 33, 61, 48, 77, 58, 84, 55, 70, 93, 65, 74, 46, 81, 57, 68, 87].map((height, index) => <i key={index} style={{ height: `${height}%` }} />)}</div><div className="chart-days"><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span></div></div></div></section>
         <section className="panel mini-panel alert-panel"><div className="mini-title"><div><h3>Needs your attention</h3><span>Priority follow-ups</span></div></div><Link href="/investigations/1" className="attention-item"><span className="attention-dot" /><span><strong>Bulk access and privilege escalation</strong><small>svc-prod-data-pipeline · Investigating</small></span></Link><Link href="/investigations/INC-2024-0846" className="attention-item"><span className="attention-dot attention-amber" /><span><strong>Credential review required</strong><small>Taylor Brooks · 38 min ago</small></span></Link></section>
       </div>
-      {dialogOpen && <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setDialogOpen(false); }}><section className="modal-card" role="dialog" aria-modal="true" aria-labelledby="new-investigation-title"><div className="modal-heading"><div><h2 id="new-investigation-title">New investigation</h2><p>Create an investigation to start tracking a potential threat.</p></div><button className="icon-button" onClick={() => setDialogOpen(false)} aria-label="Close dialog"><X size={18} /></button></div><form action={createIncident} className="modal-form"><label>Investigation title<input name="title" placeholder="e.g. Unusual data access" required /></label><label>Subject name<input name="subjectName" placeholder="Employee or account name" required /></label><label>Severity<select name="severity" defaultValue="Medium"><option>Low</option><option>Medium</option><option>High</option><option>Critical</option></select></label><label>Description<textarea name="description" rows={3} placeholder="What happened? Include any relevant context." required /></label><label>Trigger details<textarea name="triggerDetails" rows={2} placeholder="Alert source, observed behavior, or detection signal" /></label>{createError && <p className="form-error" role="alert">{createError}</p>}<div className="modal-actions"><button type="button" className="button button-secondary" onClick={() => setDialogOpen(false)}>Cancel</button><button className="button button-primary" type="submit" disabled={creating}>{creating ? "Creating..." : "Create investigation"}</button></div></form></section></div>}
+      {dialogOpen && <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setDialogOpen(false); }}><section className="modal-card" role="dialog" aria-modal="true" aria-labelledby="new-investigation-title"><div className="modal-heading"><div><h2 id="new-investigation-title">New investigation</h2><p>Create an investigation to start tracking a potential threat.</p></div><button className="icon-button" onClick={() => setDialogOpen(false)} aria-label="Close dialog"><X size={18} /></button></div><form action={createIncident} className="modal-form"><label>Investigation title<input name="title" placeholder="e.g. Unusual data access" required /></label><label>Subject name<input name="subjectName" placeholder="Employee or account name" required /></label><label>Severity<select name="severity" defaultValue="Medium" className="bg-zinc-900 text-zinc-100 border border-zinc-700" style={{ color: "#f4f4f5", backgroundColor: "#18181b" }}><option className="bg-zinc-900 text-zinc-100" style={{ color: "#f4f4f5", backgroundColor: "#18181b" }} value="Low">Low</option><option className="bg-zinc-900 text-zinc-100" style={{ color: "#f4f4f5", backgroundColor: "#18181b" }} value="Medium">Medium</option><option className="bg-zinc-900 text-zinc-100" style={{ color: "#f4f4f5", backgroundColor: "#18181b" }} value="High">High</option><option className="bg-zinc-900 text-zinc-100" style={{ color: "#f4f4f5", backgroundColor: "#18181b" }} value="Critical">Critical</option></select></label><label>Description<textarea name="description" rows={3} placeholder="What happened? Include any relevant context." required /></label><label>Trigger details<textarea name="triggerDetails" rows={2} placeholder="Alert source, observed behavior, or detection signal" /></label>{createError && <p className="form-error" role="alert">{createError}</p>}<div className="modal-actions"><button type="button" className="button button-secondary" onClick={() => setDialogOpen(false)}>Cancel</button><button className="button button-primary" type="submit" disabled={creating}>{creating ? "Creating..." : "Create investigation"}</button></div></form></section></div>}
     </>
   );
 }

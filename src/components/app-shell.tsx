@@ -10,7 +10,7 @@ import { ProfileDialog } from "@/components/profile-dialog";
 import { SpacetimeConnectionProvider } from "@/components/spacetime-connection-provider";
 import { useSpacetimeConnection } from "@/components/spacetime-connection-provider";
 import { tables } from "@/generated/spacetimedb";
-import type { Incident as LiveIncident } from "@/generated/spacetimedb/types";
+import type { AuditLog as LiveAuditLog, Incident as LiveIncident } from "@/generated/spacetimedb/types";
 import { incidents as demoIncidents } from "@/lib/mock-data";
 
 interface InvestigationTab {
@@ -109,6 +109,119 @@ function WorkspaceNavigation({ isInvestigation, isIncidents, incidentId }: {
   );
 }
 
+function NotificationBell() {
+  const { connection } = useSpacetimeConnection();
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [auditEntries, setAuditEntries] = useState<LiveAuditLog[]>([]);
+  const notificationRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!connection) {
+      setAuditEntries([]);
+      return;
+    }
+
+    let active = true;
+    let initialized = false;
+    const refreshAuditLogs = () => {
+      if (!active) return;
+      const entries = (Array.from(connection.db.auditLog.iter()) as LiveAuditLog[])
+        .sort((left, right) => {
+          if (left.sequenceId !== right.sequenceId) return right.sequenceId > left.sequenceId ? 1 : -1;
+          if (right.timestamp.microsSinceUnixEpoch !== left.timestamp.microsSinceUnixEpoch) {
+            return right.timestamp.microsSinceUnixEpoch > left.timestamp.microsSinceUnixEpoch ? 1 : -1;
+          }
+          return 0;
+        })
+        .slice(0, 5);
+      setAuditEntries(entries);
+      if (!initialized && entries.length > 0) {
+        initialized = true;
+        setUnreadCount(Math.min(entries.length, 5));
+      }
+    };
+
+    refreshAuditLogs();
+    connection.db.auditLog.onInsert(refreshAuditLogs);
+    connection.db.auditLog.onUpdate(refreshAuditLogs);
+    connection.db.auditLog.onDelete(refreshAuditLogs);
+    const subscription = connection.subscriptionBuilder()
+      .onApplied(refreshAuditLogs)
+      .subscribe([tables.auditLog]);
+
+    return () => {
+      active = false;
+      connection.db.auditLog.removeOnInsert(refreshAuditLogs);
+      connection.db.auditLog.removeOnUpdate(refreshAuditLogs);
+      connection.db.auditLog.removeOnDelete(refreshAuditLogs);
+      subscription.unsubscribe();
+    };
+  }, [connection]);
+
+  useEffect(() => {
+    if (!notificationsOpen) return;
+    const closeNotifications = (event: MouseEvent) => {
+      if (!notificationRef.current?.contains(event.target as Node)) setNotificationsOpen(false);
+    };
+    document.addEventListener("mousedown", closeNotifications);
+    return () => document.removeEventListener("mousedown", closeNotifications);
+  }, [notificationsOpen]);
+
+  function classifyAction(action: string): { label: string; className: string } {
+    if (/incident_created/i.test(action)) return { label: "ALERT", className: "critical" };
+    if (/AI analysis|AiAnalysis|Nemotron/i.test(action)) return { label: "AI TRIAGE", className: "verified" };
+    if (/asset contained|contained/i.test(action)) return { label: "CONTAINMENT", className: "" };
+    return { label: "AUDIT", className: "" };
+  }
+
+  return (
+    <div className="notification-popover-anchor" ref={notificationRef}>
+      <button
+        type="button"
+        className="icon-button notification-button"
+        aria-label="Notifications"
+        aria-expanded={notificationsOpen}
+        onClick={() => {
+          setNotificationsOpen((current) => !current);
+          setUnreadCount(0);
+        }}
+      >
+        <Bell size={17} />
+        {unreadCount > 0 && (
+          <span className="notification-unread-badge" aria-label={`${unreadCount} unread notifications`}>
+            {unreadCount}
+          </span>
+        )}
+      </button>
+      {notificationsOpen && (
+        <div className="notification-popover" role="dialog" aria-label="Recent notifications">
+          <div className="notification-popover-heading">
+            <strong>System notifications</strong>
+            <span>{auditEntries.length > 0 ? `${auditEntries.length} recent` : "0 recent"}</span>
+          </div>
+          {auditEntries.length === 0 ? (
+            <p className="notification-empty">No recent system notifications</p>
+          ) : (
+            <ul>
+              {auditEntries.map((entry) => {
+                const notification = classifyAction(entry.action);
+                return (
+                  <li key={entry.sequenceId.toString()}>
+                    <span className={`notification-severity ${notification.className}`}>{notification.label}</span>
+                    <p>{entry.action}</p>
+                    <small>Sequence #{entry.sequenceId.toString()}</small>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const isInvestigation = pathname.startsWith("/investigations/");
@@ -116,20 +229,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const investigationMatch = pathname.match(/^\/investigations\/([^/?#]+)/);
   const incidentId = investigationMatch?.[1] ?? null;
   const [authOpenToken, setAuthOpenToken] = useState(0);
-  const [notificationsOpen, setNotificationsOpen] = useState(false);
-  const [unreadCount, setUnreadCount] = useState(3);
-  const notificationRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!notificationsOpen) return;
-    const closeNotifications = (event: MouseEvent) => {
-      if (!notificationRef.current?.contains(event.target as Node)) {
-        setNotificationsOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", closeNotifications);
-    return () => document.removeEventListener("mousedown", closeNotifications);
-  }, [notificationsOpen]);
 
   return (
     <SpacetimeConnectionProvider>
@@ -160,38 +259,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <header className="topbar">
           <div className="breadcrumbs"><span>Workspace</span><span className="crumb-slash">/</span><strong>{isInvestigation ? "Investigation" : isIncidents ? "Security Incidents" : "Overview"}</strong></div>
           <div className="topbar-actions">
-            <div className="notification-popover-anchor" ref={notificationRef}>
-              <button
-                type="button"
-                className="icon-button notification-button"
-                aria-label="Notifications"
-                aria-expanded={notificationsOpen}
-                onClick={() => {
-                  setNotificationsOpen((current) => !current);
-                  setUnreadCount(0);
-                }}
-              >
-                <Bell size={17} />
-                {unreadCount > 0 && (
-                  <span className="notification-unread-badge" aria-label={`${unreadCount} unread notifications`}>
-                    {unreadCount}
-                  </span>
-                )}
-              </button>
-              {notificationsOpen && (
-                <div className="notification-popover" role="dialog" aria-label="Recent notifications">
-                  <div className="notification-popover-heading">
-                    <strong>System notifications</strong>
-                    <span>3 recent</span>
-                  </div>
-                  <ul>
-                    <li><span className="notification-severity critical">CRITICAL</span><p>Ransomware canary alert triggered on Corporate Endpoint</p></li>
-                    <li><span className="notification-severity">CONTAINMENT</span><p>Containment policy deployed by active responder</p></li>
-                    <li><span className="notification-severity verified">VERIFIED</span><p>Audit log sequence cryptographically verified (SHA-256)</p></li>
-                  </ul>
-                </div>
-              )}
-            </div>
+            <NotificationBell />
             <div className="topbar-divider" />
             <AuthModal externalOpenToken={authOpenToken} />
           </div>

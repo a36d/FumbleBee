@@ -1948,3 +1948,18 @@ body { color: var(--text); }
   .profile-risk-card { gap: 8px; padding: 10px; }
   .profile-risk-copy > small { font-size: 8px; }
 }
+
+select.bg-zinc-900,
+select.bg-zinc-900 option,
+.bg-zinc-900 option {
+  color: #f4f4f5 !important;
+  background-color: #18181b !important;
+}
+
+.notification-empty {
+  margin: 0;
+  padding: 18px 12px;
+  color: #a1a1aa;
+  font-size: 11px;
+  text-align: center;
+}
