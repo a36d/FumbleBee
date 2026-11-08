@@ -14,6 +14,7 @@ export interface ResponderSessionProfile {
 interface SpacetimeConnectionContextValue {
   connection: DbConnection | null;
   connectionError: string;
+  responderSession: ResponderSessionProfile | null;
   saveSession: (profile: ResponderSessionProfile) => void;
   switchSession: (profile: ResponderSessionProfile) => void;
 }
@@ -36,10 +37,36 @@ function readSavedToken(): string | undefined {
   }
 }
 
+function readSavedProfile(): ResponderSessionProfile | null {
+  try {
+    const saved = localStorage.getItem(sessionStorageKey);
+    if (!saved) return null;
+    const parsed: unknown = JSON.parse(saved);
+    if (
+      parsed &&
+      typeof parsed === "object" &&
+      "username" in parsed &&
+      typeof parsed.username === "string" &&
+      "role" in parsed &&
+      typeof parsed.role === "string"
+    ) {
+      return { username: parsed.username, role: parsed.role };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 export function SpacetimeConnectionProvider({ children }: { children: React.ReactNode }) {
   const [connection, setConnection] = useState<DbConnection | null>(null);
   const [connectionError, setConnectionError] = useState("");
   const [authToken, setAuthToken] = useState<string | null>(null);
+  const [responderSession, setResponderSession] = useState<ResponderSessionProfile | null>(null);
+
+  useEffect(() => {
+    setResponderSession(readSavedProfile());
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -88,6 +115,7 @@ export function SpacetimeConnectionProvider({ children }: { children: React.Reac
     }
     const savedProfile = { ...profile, token: authToken };
     localStorage.setItem(sessionStorageKey, JSON.stringify(savedProfile));
+    setResponderSession({ username: profile.username, role: profile.role });
     const storedSessions = localStorage.getItem(responderSessionsStorageKey);
     const sessions: ResponderSessionProfile[] = storedSessions ? JSON.parse(storedSessions) as ResponderSessionProfile[] : [];
     const updatedSessions = [
@@ -102,11 +130,12 @@ export function SpacetimeConnectionProvider({ children }: { children: React.Reac
       throw new Error("This responder has no saved SpacetimeDB session on this device.");
     }
     localStorage.setItem(sessionStorageKey, JSON.stringify(profile));
+    setResponderSession({ username: profile.username, role: profile.role });
     window.location.reload();
   }
 
   return (
-    <SpacetimeConnectionContext.Provider value={{ connection, connectionError, saveSession, switchSession }}>
+    <SpacetimeConnectionContext.Provider value={{ connection, connectionError, responderSession, saveSession, switchSession }}>
       {children}
     </SpacetimeConnectionContext.Provider>
   );

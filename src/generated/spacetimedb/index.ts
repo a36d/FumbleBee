@@ -38,6 +38,7 @@ import AddInvestigationNoteReducer from "./add_investigation_note_reducer";
 import ApplyAiAnalysisReducer from "./apply_ai_analysis_reducer";
 import ApplyAssetContainmentReducer from "./apply_asset_containment_reducer";
 import AssignUserRoleReducer from "./assign_user_role_reducer";
+import ChangeUserPassphraseReducer from "./change_user_passphrase_reducer";
 import CreateIncidentReducer from "./create_incident_reducer";
 import CreateUserReducer from "./create_user_reducer";
 import DeleteUserReducer from "./delete_user_reducer";
@@ -46,6 +47,7 @@ import SignInReducer from "./sign_in_reducer";
 import SignUpReducer from "./sign_up_reducer";
 import UpdateAssetCompromiseStatusReducer from "./update_asset_compromise_status_reducer";
 import UpdateIncidentReducer from "./update_incident_reducer";
+import UpdateUserProfileReducer from "./update_user_profile_reducer";
 
 // Import all procedure arg schemas
 
@@ -162,6 +164,7 @@ const reducersSchema = __reducers(
   __reducerSchema("apply_ai_analysis", ApplyAiAnalysisReducer),
   __reducerSchema("apply_asset_containment", ApplyAssetContainmentReducer),
   __reducerSchema("assign_user_role", AssignUserRoleReducer),
+  __reducerSchema("change_user_passphrase", ChangeUserPassphraseReducer),
   __reducerSchema("create_incident", CreateIncidentReducer),
   __reducerSchema("create_user", CreateUserReducer),
   __reducerSchema("delete_user", DeleteUserReducer),
@@ -170,6 +173,7 @@ const reducersSchema = __reducers(
   __reducerSchema("sign_up", SignUpReducer),
   __reducerSchema("update_asset_compromise_status", UpdateAssetCompromiseStatusReducer),
   __reducerSchema("update_incident", UpdateIncidentReducer),
+  __reducerSchema("update_user_profile", UpdateUserProfileReducer),
 );
 
 /** The schema information for all procedures in this module. This is defined the same way as the procedures would have been defined in the server. */
@@ -228,4 +232,3 @@ export class DbConnection extends __DbConnectionImpl<typeof REMOTE_MODULE> {
     return new SubscriptionBuilder(this);
   };
 }
-

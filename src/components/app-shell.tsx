@@ -6,6 +6,7 @@ import Image from "next/image";
 import { Bell, ChevronDown, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { AuthModal } from "@/components/auth-modal";
+import { ProfileDialog } from "@/components/profile-dialog";
 import { SpacetimeConnectionProvider } from "@/components/spacetime-connection-provider";
 import { useSpacetimeConnection } from "@/components/spacetime-connection-provider";
 import { tables } from "@/generated/spacetimedb";
@@ -128,7 +129,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <WorkspaceNavigation isInvestigation={isInvestigation} isIncidents={isIncidents} incidentId={incidentId} />
         <div className="sidebar-bottom">
           <div className="system-status"><span className="status-dot" /><span><strong>All systems operational</strong><small>Last synced just now</small></span></div>
-          <button className="profile-button"><span className="avatar avatar-green">AM</span><span className="profile-copy"><strong>Alex Morgan</strong><small>Security analyst</small></span><ChevronDown size={14} /></button>
+          <ProfileDialog />
         </div>
       </aside>
       <div className="main-column">

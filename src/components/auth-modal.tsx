@@ -6,6 +6,7 @@ import { X } from "lucide-react";
 import { tables } from "@/generated/spacetimedb";
 import type { User } from "@/generated/spacetimedb/types";
 import { useSpacetimeConnection } from "@/components/spacetime-connection-provider";
+import { hashPassphrase } from "@/lib/auth";
 
 const responderRoles = [
   "SOC Investigator",
@@ -94,14 +95,6 @@ function isSavedResponderSession(value: unknown): value is SavedResponderSession
     "token" in value &&
     typeof value.token === "string",
   );
-}
-
-async function hashPassphrase(passphrase: string): Promise<string> {
-  if (!globalThis.crypto?.subtle) {
-    throw new Error("Secure passphrase hashing is unavailable in this browser.");
-  }
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(passphrase));
-  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 export function AuthModal() {

@@ -10,6 +10,7 @@ import AddInvestigationNoteReducer from "../add_investigation_note_reducer";
 import ApplyAiAnalysisReducer from "../apply_ai_analysis_reducer";
 import ApplyAssetContainmentReducer from "../apply_asset_containment_reducer";
 import AssignUserRoleReducer from "../assign_user_role_reducer";
+import ChangeUserPassphraseReducer from "../change_user_passphrase_reducer";
 import CreateIncidentReducer from "../create_incident_reducer";
 import CreateUserReducer from "../create_user_reducer";
 import DeleteUserReducer from "../delete_user_reducer";
@@ -18,11 +19,13 @@ import SignInReducer from "../sign_in_reducer";
 import SignUpReducer from "../sign_up_reducer";
 import UpdateAssetCompromiseStatusReducer from "../update_asset_compromise_status_reducer";
 import UpdateIncidentReducer from "../update_incident_reducer";
+import UpdateUserProfileReducer from "../update_user_profile_reducer";
 
 export type AddInvestigationNoteParams = __Infer<typeof AddInvestigationNoteReducer>;
 export type ApplyAiAnalysisParams = __Infer<typeof ApplyAiAnalysisReducer>;
 export type ApplyAssetContainmentParams = __Infer<typeof ApplyAssetContainmentReducer>;
 export type AssignUserRoleParams = __Infer<typeof AssignUserRoleReducer>;
+export type ChangeUserPassphraseParams = __Infer<typeof ChangeUserPassphraseReducer>;
 export type CreateIncidentParams = __Infer<typeof CreateIncidentReducer>;
 export type CreateUserParams = __Infer<typeof CreateUserReducer>;
 export type DeleteUserParams = __Infer<typeof DeleteUserReducer>;
@@ -31,4 +34,4 @@ export type SignInParams = __Infer<typeof SignInReducer>;
 export type SignUpParams = __Infer<typeof SignUpReducer>;
 export type UpdateAssetCompromiseStatusParams = __Infer<typeof UpdateAssetCompromiseStatusReducer>;
 export type UpdateIncidentParams = __Infer<typeof UpdateIncidentReducer>;
-
+export type UpdateUserProfileParams = __Infer<typeof UpdateUserProfileReducer>;

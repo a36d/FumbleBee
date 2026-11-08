@@ -316,6 +316,43 @@ export const signIn = spacetime.reducer(
   },
 );
 
+export const updateUserProfile = spacetime.reducer(
+  { name: t.string(), email: t.string() },
+  (ctx: any, args: any) => {
+    const existing = ctx.db.user.identity.find(ctx.sender);
+    if (!existing) throw new SenderError('Responder account not found');
+    const name = args.name.trim();
+    const email = args.email.trim().toLowerCase();
+    if (!name || name.length > 100) throw new SenderError('Name must be between 1 and 100 characters');
+    if (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      throw new SenderError('Enter a valid contact email');
+    }
+    ctx.db.user.identity.delete(ctx.sender);
+    ctx.db.user.insert({ ...existing, name, email });
+    appendAudit(ctx, `USER_PROFILE_UPDATED: [${existing.username}]`, null);
+  },
+);
+
+export const changeUserPassphrase = spacetime.reducer(
+  { currentPassphraseHash: t.string(), newPassphraseHash: t.string() },
+  (ctx: any, args: any) => {
+    const existing = ctx.db.user.identity.find(ctx.sender);
+    if (!existing) throw new SenderError('Responder account not found');
+    if (existing.passphraseHash !== args.currentPassphraseHash) {
+      throw new SenderError('Current passphrase is incorrect');
+    }
+    if (!/^[a-f0-9]{64}$/.test(args.newPassphraseHash)) {
+      throw new SenderError('New passphrase hash is invalid');
+    }
+    if (args.currentPassphraseHash === args.newPassphraseHash) {
+      throw new SenderError('Choose a different passphrase');
+    }
+    ctx.db.user.identity.delete(ctx.sender);
+    ctx.db.user.insert({ ...existing, passphraseHash: args.newPassphraseHash });
+    appendAudit(ctx, `USER_PASSPHRASE_CHANGED: [${existing.username}]`, null);
+  },
+);
+
 export const assignUserRole = spacetime.reducer(
   { targetIdentity: t.identity(), newRole: t.string() },
   (ctx: any, args: any) => {
