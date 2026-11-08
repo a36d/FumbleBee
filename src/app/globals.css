@@ -1963,3 +1963,24 @@ select.bg-zinc-900 option,
   font-size: 11px;
   text-align: center;
 }
+
+.alert-panel .attention-item {
+  flex-wrap: wrap;
+}
+
+.alert-panel .attention-item > span:nth-child(2) {
+  flex: 1;
+  min-width: 150px;
+}
+
+.alert-panel .attention-item .severity-badge {
+  margin-left: auto;
+}
+
+.empty-attention-state {
+  padding: 18px 1px;
+  border-top: 1px solid #102f35;
+  color: #638286;
+  font-size: 10px;
+  text-align: center;
+}

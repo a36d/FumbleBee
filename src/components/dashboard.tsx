@@ -19,6 +19,23 @@ import type {
 
 const riskTone = (score: number) => score >= 85 ? "risk-critical" : score >= 70 ? "risk-high" : score >= 45 ? "risk-medium" : "risk-low";
 
+const commonSubjectSuggestions = [
+  "svc-prod-data-pipeline",
+  "aws-iam-admin",
+  "corp-laptop-finance",
+];
+
+function formatRelativeTime(date: Date): string {
+  const elapsedSeconds = Math.max(0, Math.floor((Date.now() - date.getTime()) / 1000));
+  if (elapsedSeconds < 60) return "just now";
+  const elapsedMinutes = Math.floor(elapsedSeconds / 60);
+  if (elapsedMinutes < 60) return `${elapsedMinutes}m ago`;
+  const elapsedHours = Math.floor(elapsedMinutes / 60);
+  if (elapsedHours < 24) return `${elapsedHours}h ago`;
+  const elapsedDays = Math.floor(elapsedHours / 24);
+  return elapsedDays === 1 ? "1 day ago" : `${elapsedDays} days ago`;
+}
+
 export function Dashboard() {
   const router = useRouter();
   const { connection } = useSpacetimeConnection();
@@ -67,6 +84,8 @@ export function Dashboard() {
     connection.db.user.onInsert(refreshUsers);
     connection.db.user.onUpdate(refreshUsers);
     connection.db.auditLog.onInsert(refreshAuditLogs);
+    connection.db.auditLog.onUpdate(refreshAuditLogs);
+    connection.db.auditLog.onDelete(refreshAuditLogs);
     connection.subscriptionBuilder()
       .subscribe([tables.incident, tables.asset, tables.user, tables.auditLog]);
 
@@ -79,6 +98,8 @@ export function Dashboard() {
       connection.db.user.removeOnInsert(refreshUsers);
       connection.db.user.removeOnUpdate(refreshUsers);
       connection.db.auditLog.removeOnInsert(refreshAuditLogs);
+      connection.db.auditLog.removeOnUpdate(refreshAuditLogs);
+      connection.db.auditLog.removeOnDelete(refreshAuditLogs);
     };
   }, [connection]);
 
@@ -111,6 +132,43 @@ export function Dashboard() {
         confidence: Number(incident.confidence),
       }))
     : localIncidents;
+
+  const subjectSuggestions = Array.from(new Set([
+    ...liveUsers.map((user) => user.name.trim()).filter(Boolean),
+    ...liveAssets.map((asset) => asset.name.trim()).filter(Boolean),
+    ...commonSubjectSuggestions,
+  ]));
+
+  const priorityIncidents = liveIncidents
+    .filter((incident) =>
+      incident.status.toLowerCase() !== "resolved" &&
+      ["Critical", "High"].includes(incident.severity)
+    )
+    .sort((left, right) => {
+      const leftTime = left.createdAt.microsSinceUnixEpoch;
+      const rightTime = right.createdAt.microsSinceUnixEpoch;
+      if (leftTime === rightTime) return right.id > left.id ? 1 : -1;
+      return rightTime > leftTime ? 1 : -1;
+    })
+    .slice(0, 3);
+
+  const chartDays = Array.from({ length: 7 }, (_, index) => {
+    const date = new Date();
+    date.setHours(0, 0, 0, 0);
+    date.setDate(date.getDate() - (6 - index));
+    return date;
+  });
+  const chartCounts = chartDays.map((day) => {
+    const nextDay = new Date(day);
+    nextDay.setDate(nextDay.getDate() + 1);
+    return liveAuditLogs.filter((entry) => {
+      const timestamp = new Date(Number(entry.timestamp.microsSinceUnixEpoch / 1000n));
+      return timestamp >= day && timestamp < nextDay;
+    }).length;
+  });
+  const chartMax = Math.max(1, ...chartCounts);
+  const chartHeights = chartCounts.map((count) => Math.round((count / chartMax) * 100));
+
   const normalizedQuery = query.trim().toLowerCase();
   const filtered = displayIncidents.filter((incident) => {
     const matchesSearch = `${incident.id} ${incident.title} ${incident.subjectName}`
@@ -273,10 +331,48 @@ export function Dashboard() {
         </div>
       </section>
       <div className="dashboard-bottom">
-        <section className="panel mini-panel"><div className="mini-title"><div><h3>Threat activity</h3><span>Last 7 days</span></div></div><div className="activity-chart" aria-label="Threat activity trend chart"><div className="chart-y-labels"><span>40</span><span>20</span><span>0</span></div><div className="chart-plot"><div className="chart-gridline one" /><div className="chart-gridline two" /><div className="chart-bars">{[28, 42, 33, 61, 48, 77, 58, 84, 55, 70, 93, 65, 74, 46, 81, 57, 68, 87].map((height, index) => <i key={index} style={{ height: `${height}%` }} />)}</div><div className="chart-days"><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span></div></div></div></section>
-        <section className="panel mini-panel alert-panel"><div className="mini-title"><div><h3>Needs your attention</h3><span>Priority follow-ups</span></div></div><Link href="/investigations/1" className="attention-item"><span className="attention-dot" /><span><strong>Bulk access and privilege escalation</strong><small>svc-prod-data-pipeline · Investigating</small></span></Link><Link href="/investigations/INC-2024-0846" className="attention-item"><span className="attention-dot attention-amber" /><span><strong>Credential review required</strong><small>Taylor Brooks · 38 min ago</small></span></Link></section>
+        <section className="panel mini-panel">
+          <div className="mini-title"><div><h3>Threat activity</h3><span>Last 7 days</span></div></div>
+          <div className="activity-chart" aria-label="Threat activity trend chart">
+            <div className="chart-y-labels"><span>{chartMax}</span><span>{Math.ceil(chartMax / 2)}</span><span>0</span></div>
+            <div className="chart-plot">
+              <div className="chart-gridline one" /><div className="chart-gridline two" />
+              <div className="chart-bars">
+                {chartHeights.map((height, index) => (
+                  <i
+                    key={chartDays[index].toISOString()}
+                    style={{ height: `${height}%` }}
+                    title={`${chartCounts[index]} audit events`}
+                  />
+                ))}
+              </div>
+              <div className="chart-days">
+                {chartDays.map((day) => <span key={day.toISOString()}>{new Intl.DateTimeFormat("en", { weekday: "short" }).format(day).slice(0, 2)}</span>)}
+              </div>
+            </div>
+          </div>
+        </section>
+        <section className="panel mini-panel alert-panel">
+          <div className="mini-title"><div><h3>Needs your attention</h3><span>Priority follow-ups</span></div></div>
+          {priorityIncidents.length === 0 ? (
+            <div className="empty-attention-state">No critical follow-ups pending</div>
+          ) : priorityIncidents.map((incident) => {
+            const severity = incident.severity as Severity;
+            const createdAt = new Date(Number(incident.createdAt.microsSinceUnixEpoch / 1000n));
+            return (
+              <Link key={incident.id.toString()} href={`/investigations/${incident.id.toString()}`} className="attention-item">
+                <span className={`attention-dot ${severity === "High" ? "attention-amber" : ""}`} />
+                <span>
+                  <strong>{incident.title}</strong>
+                  <small>{incident.subjectName || "Unassigned subject"} · {formatRelativeTime(createdAt)}</small>
+                </span>
+                <SeverityBadge severity={severity} />
+              </Link>
+            );
+          })}
+        </section>
       </div>
-      {dialogOpen && <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setDialogOpen(false); }}><section className="modal-card" role="dialog" aria-modal="true" aria-labelledby="new-investigation-title"><div className="modal-heading"><div><h2 id="new-investigation-title">New investigation</h2><p>Create an investigation to start tracking a potential threat.</p></div><button className="icon-button" onClick={() => setDialogOpen(false)} aria-label="Close dialog"><X size={18} /></button></div><form action={createIncident} className="modal-form"><label>Investigation title<input name="title" placeholder="e.g. Unusual data access" required /></label><label>Subject name<input name="subjectName" placeholder="Employee or account name" required /></label><label>Severity<select name="severity" defaultValue="Medium" className="bg-zinc-900 text-zinc-100 border border-zinc-700" style={{ color: "#f4f4f5", backgroundColor: "#18181b" }}><option className="bg-zinc-900 text-zinc-100" style={{ color: "#f4f4f5", backgroundColor: "#18181b" }} value="Low">Low</option><option className="bg-zinc-900 text-zinc-100" style={{ color: "#f4f4f5", backgroundColor: "#18181b" }} value="Medium">Medium</option><option className="bg-zinc-900 text-zinc-100" style={{ color: "#f4f4f5", backgroundColor: "#18181b" }} value="High">High</option><option className="bg-zinc-900 text-zinc-100" style={{ color: "#f4f4f5", backgroundColor: "#18181b" }} value="Critical">Critical</option></select></label><label>Description<textarea name="description" rows={3} placeholder="What happened? Include any relevant context." required /></label><label>Trigger details<textarea name="triggerDetails" rows={2} placeholder="Alert source, observed behavior, or detection signal" /></label>{createError && <p className="form-error" role="alert">{createError}</p>}<div className="modal-actions"><button type="button" className="button button-secondary" onClick={() => setDialogOpen(false)}>Cancel</button><button className="button button-primary" type="submit" disabled={creating}>{creating ? "Creating..." : "Create investigation"}</button></div></form></section></div>}
+      {dialogOpen && <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setDialogOpen(false); }}><section className="modal-card" role="dialog" aria-modal="true" aria-labelledby="new-investigation-title"><div className="modal-heading"><div><h2 id="new-investigation-title">New investigation</h2><p>Create an investigation to start tracking a potential threat.</p></div><button className="icon-button" onClick={() => setDialogOpen(false)} aria-label="Close dialog"><X size={18} /></button></div><form action={createIncident} className="modal-form"><label>Investigation title<input name="title" placeholder="e.g. Unusual data access" required /></label><label>Subject name<input name="subjectName" list="subject-suggestions" placeholder="e.g. svc-prod-data-pipeline or employee name" required /><datalist id="subject-suggestions">{subjectSuggestions.map((subject) => <option key={subject} value={subject} />)}</datalist></label><label>Severity<select name="severity" defaultValue="Medium" className="bg-zinc-900 text-zinc-100 border border-zinc-700" style={{ color: "#f4f4f5", backgroundColor: "#18181b" }}><option className="bg-zinc-900 text-zinc-100" style={{ color: "#f4f4f5", backgroundColor: "#18181b" }} value="Low">Low</option><option className="bg-zinc-900 text-zinc-100" style={{ color: "#f4f4f5", backgroundColor: "#18181b" }} value="Medium">Medium</option><option className="bg-zinc-900 text-zinc-100" style={{ color: "#f4f4f5", backgroundColor: "#18181b" }} value="High">High</option><option className="bg-zinc-900 text-zinc-100" style={{ color: "#f4f4f5", backgroundColor: "#18181b" }} value="Critical">Critical</option></select></label><label>Description<textarea name="description" rows={3} placeholder="What happened? Include any relevant context." required /></label><label>Trigger details<textarea name="triggerDetails" rows={2} placeholder="Alert source, observed behavior, or detection signal" /></label>{createError && <p className="form-error" role="alert">{createError}</p>}<div className="modal-actions"><button type="button" className="button button-secondary" onClick={() => setDialogOpen(false)}>Cancel</button><button className="button button-primary" type="submit" disabled={creating}>{creating ? "Creating..." : "Create investigation"}</button></div></form></section></div>}
     </>
   );
 }
