@@ -1,21 +1,20 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Activity, AlertTriangle, ArrowLeft, ArrowUpRight, Check, CheckCircle2, Clock3, FileClock, Fingerprint, LoaderCircle, LockKeyhole, Plus, Shield, Sparkles } from "lucide-react";
+import { Activity, AlertTriangle, ArrowLeft, ArrowUpRight, Check, CheckCircle2, Clock3, FileClock, Fingerprint, LoaderCircle, LockKeyhole, Plus, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { createSentinelGraphClient, formatAttackGraph, type AiAnalysisInput } from "@/sdk/src/index";
 import {
   DbConnection,
   tables,
 } from "@/generated/spacetimedb";
-import type { Asset as LiveAsset, Incident as LiveIncident, InvestigationNote as LiveNote, Relationship as LiveRelationship } from "@/generated/spacetimedb/types";
+import type { ActivityFeed as LiveActivity, Asset as LiveAsset, AuditLog as LiveAuditLog, Incident as LiveIncident, InvestigationNote as LiveNote, Relationship as LiveRelationship } from "@/generated/spacetimedb/types";
 import { activity as initialActivity, assets, auditLogs, incidents, notes as initialNotes, relationships, relativeTime, seededIncidentAssets, seededIncidentRelationships } from "@/lib/mock-data";
 import { getAttackPathLayout } from "@/lib/graph-layout";
 import type { ActivityFeed, Asset as FrontendAsset, Incident as FrontendIncident, InvestigationNote, Relationship as FrontendRelationship } from "@/lib/types";
 import { AttackGraph } from "@/components/attack-graph";
+import { AuditFeedPanel, type AuditFeedActivity, type AuditFeedEntry } from "@/components/audit-feed-panel";
 import { SeverityBadge, StatusBadge } from "@/components/severity-badge";
-
-const activityIcon = { incident: Shield, note: Plus, analysis: Sparkles, risk: AlertTriangle, graph: Activity };
 
 export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
   const fallbackIncident = useMemo(() => incidents.find((item) => item.id === incidentId) ?? incidents[0], [incidentId]);
@@ -23,6 +22,8 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
   const incident = liveIncident ?? fallbackIncident;
   const [notes, setNotes] = useState(initialNotes.filter((note) => note.incidentId === incident.id));
   const [events, setEvents] = useState(initialActivity.filter((item) => item.incidentId === incident.id));
+  const [liveActivities, setLiveActivities] = useState<AuditFeedActivity[]>([]);
+  const [liveAuditEntries, setLiveAuditEntries] = useState<AuditFeedEntry[]>([]);
   const [noteText, setNoteText] = useState("");
   const [analysisRunning, setAnalysisRunning] = useState(false);
   const [analysisError, setAnalysisError] = useState("");
@@ -89,6 +90,27 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
         setNotes(liveNotes);
       }
 
+      const currentActivities = (Array.from(connection.db.activityFeed.iter()) as LiveActivity[])
+        .filter((row) => row.incidentId === 1n)
+        .map((row): AuditFeedActivity => ({
+          id: row.id,
+          actorName: row.actorName,
+          action: row.action,
+          createdAt: new Date(Number(row.createdAt.microsSinceUnixEpoch / 1000n)),
+        }));
+      setLiveActivities(currentActivities);
+
+      const currentAuditEntries = (Array.from(connection.db.auditLog.iter()) as LiveAuditLog[])
+        .filter((row) => row.incidentId === 1n)
+        .map((row): AuditFeedEntry => ({
+          sequenceId: row.sequenceId,
+          action: row.action,
+          timestamp: new Date(Number(row.timestamp.microsSinceUnixEpoch / 1000n)),
+          currentHash: row.currentHash,
+          previousHash: row.previousHash,
+        }));
+      setLiveAuditEntries(currentAuditEntries);
+
       const liveAssets = (Array.from(connection.db.asset.iter()) as LiveAsset[])
         .filter((row) => row.incidentId === 1n)
         .map((row): FrontendAsset => ({
@@ -123,6 +145,8 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
           tables.investigationNote,
           tables.asset,
           tables.relationship,
+          tables.activityFeed,
+          tables.auditLog,
         ]);
       })
       .build();
@@ -140,6 +164,12 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
     connection.db.relationship.onInsert(refreshOnTableChange);
     connection.db.relationship.onUpdate(refreshOnTableChange);
     connection.db.relationship.onDelete(refreshOnTableChange);
+    connection.db.activityFeed.onInsert(refreshOnTableChange);
+    connection.db.activityFeed.onUpdate(refreshOnTableChange);
+    connection.db.activityFeed.onDelete(refreshOnTableChange);
+    connection.db.auditLog.onInsert(refreshOnTableChange);
+    connection.db.auditLog.onUpdate(refreshOnTableChange);
+    connection.db.auditLog.onDelete(refreshOnTableChange);
 
     const client = createSentinelGraphClient({
       host: "http://localhost:3000",
@@ -177,6 +207,12 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
         connection.db.relationship.removeOnInsert(refreshOnTableChange);
         connection.db.relationship.removeOnUpdate(refreshOnTableChange);
         connection.db.relationship.removeOnDelete(refreshOnTableChange);
+        connection.db.activityFeed.removeOnInsert(refreshOnTableChange);
+        connection.db.activityFeed.removeOnUpdate(refreshOnTableChange);
+        connection.db.activityFeed.removeOnDelete(refreshOnTableChange);
+        connection.db.auditLog.removeOnInsert(refreshOnTableChange);
+        connection.db.auditLog.removeOnUpdate(refreshOnTableChange);
+        connection.db.auditLog.removeOnDelete(refreshOnTableChange);
         connection.disconnect();
       }
     };
@@ -234,6 +270,22 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
     recommendations: analysisResult?.recommendations ?? incident.recommendations,
   };
 
+  const panelActivities = useMemo(() => {
+    const workspaceActivities = events.map((item) => ({
+        id: item.id,
+        actorName: item.actor,
+        action: item.action,
+        createdAt: item.createdAt,
+      }));
+    const uniqueActivities = new Map(
+      [...workspaceActivities, ...liveActivities].map((item) => [
+        `${item.action}:${item.actorName}:${new Date(item.createdAt).getTime()}`,
+        item,
+      ]),
+    );
+    return [...uniqueActivities.values()];
+  }, [events, liveActivities]);
+
   function addNote(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const content = noteText.trim();
@@ -289,10 +341,7 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
             <form className="note-form" onSubmit={addNote}><span className="avatar avatar-blue note-avatar">AM</span><div className="note-input-wrap"><textarea value={noteText} onChange={(event) => setNoteText(event.target.value)} placeholder="Add an investigation note..." rows={2} /><div className="note-submit-row"><span>Visible to investigation team</span><button type="submit" className="button button-primary button-small" disabled={!noteText.trim()}><Plus size={13} /> Add note</button></div></div></form>
           </section>
 
-          <section className="panel activity-panel" id="activity">
-            <div className="panel-heading compact-heading"><div><div className="section-title-row"><span className="panel-heading-icon panel-icon-mint"><Activity size={15} /></span><h2>Activity</h2></div><p>Investigation timeline</p></div><button className="small-icon-button" aria-label="More activity options">···</button></div>
-            <div className="timeline">{events.map((item, index) => { const Icon = activityIcon[item.kind]; return <article className="timeline-item" key={item.id}><span className={`timeline-icon timeline-${item.kind}`}><Icon size={12} /></span>{index < events.length - 1 && <span className="timeline-line" />}<div><p>{item.action}</p><small>{item.actor}<span>·</span>{relativeTime(item.createdAt)}</small></div></article>; })}</div>
-          </section>
+          <AuditFeedPanel activities={panelActivities} auditEntries={liveAuditEntries} />
         </div>
       </div>
 
