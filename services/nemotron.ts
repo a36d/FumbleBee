@@ -222,7 +222,7 @@ export async function analyzeWithNemotron(
         max_tokens: 2048,
         response_format: {
           type: 'json_schema',
-          json_schema: { name: 'sentinelgraph_analysis', strict: true, schema: requestSchema },
+          json_schema: { name: 'fumblebee_analysis', strict: true, schema: requestSchema },
         },
       }),
     });
@@ -297,7 +297,7 @@ export async function generateContainmentScript(
         max_tokens: 512,
         response_format: {
           type: 'json_schema',
-          json_schema: { name: 'sentinelgraph_containment', strict: true, schema: requestSchema },
+          json_schema: { name: 'fumblebee_containment', strict: true, schema: requestSchema },
         },
       }),
     });

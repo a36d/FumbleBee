@@ -38,6 +38,7 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
   const [analysisRunning, setAnalysisRunning] = useState(false);
   const [analysisError, setAnalysisError] = useState("");
   const [assetActionPending, setAssetActionPending] = useState(false);
+  const [containmentError, setContainmentError] = useState("");
   const [mitigationGenerating, setMitigationGenerating] = useState(false);
   const [mitigationError, setMitigationError] = useState("");
   const [mitigationPlaybook, setMitigationPlaybook] = useState<MitigationPlaybook | null>(null);
@@ -61,6 +62,25 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
   const [auditOpen, setAuditOpen] = useState(false);
   const [checked, setChecked] = useState<string[]>([]);
   const [sentinelClient, setSentinelClient] = useState<ReturnType<typeof createSentinelGraphClient> | null>(null);
+
+  useEffect(() => {
+    const focusWorkspaceTarget = () => {
+      if (window.location.hash === "#attack-graph") {
+        const graphPanel = document.getElementById("attack-graph");
+        graphPanel?.scrollIntoView({ behavior: "smooth", block: "center" });
+        graphPanel?.focus({ preventScroll: true });
+      }
+      if (window.location.hash === "#audit-trail") {
+        const auditPanel = document.getElementById("audit-trail");
+        auditPanel?.scrollIntoView({ behavior: "smooth", block: "center" });
+        window.requestAnimationFrame(() => document.getElementById("audit-tab")?.click());
+      }
+    };
+
+    focusWorkspaceTarget();
+    window.addEventListener("hashchange", focusWorkspaceTarget);
+    return () => window.removeEventListener("hashchange", focusWorkspaceTarget);
+  }, []);
 
   function applyAssetScopes(nodes: Node[]) {
     return nodes.map((node) => {
@@ -423,26 +443,93 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
 
   async function executeContainment() {
     if (!selectedAsset) return;
-    if (!connection || selectedAsset.databaseId === undefined) {
-      setAnalysisError("This asset is not connected to a SpacetimeDB record, so containment cannot be applied.");
+    if (!connection) {
+      const message = "This asset is not connected to a SpacetimeDB record, so containment cannot be applied.";
+      console.error("[Containment] ", message);
+      setContainmentError(message);
+      setAnalysisError(message);
       return;
     }
 
     setAssetActionPending(true);
     setAnalysisError("");
+    setContainmentError("");
+
+    let resolvedAssetId = selectedAsset.databaseId;
+    if (resolvedAssetId === undefined) {
+      for (let attempt = 0; attempt < 8 && resolvedAssetId === undefined; attempt++) {
+        const liveRows = Array.from(connection.db.asset.iter()) as LiveAsset[];
+        const incidentAssets = liveRows.filter((row) => row.incidentId === 1n);
+        const normalizedName = selectedAsset.name.trim().toLowerCase();
+        const normalizedType = selectedAsset.type.trim().toLowerCase();
+        const matchedAsset = incidentAssets.find((row) => row.assetKey === selectedAsset.id)
+          ?? incidentAssets.find((row) => row.name.trim().toLowerCase() === normalizedName)
+          ?? incidentAssets.find((row) => row.assetType.trim().toLowerCase() === normalizedType);
+
+        if (matchedAsset) {
+          resolvedAssetId = matchedAsset.id;
+          setSelectedAsset((current) => current
+            ? { ...current, databaseId: matchedAsset.id }
+            : current);
+        } else if (attempt < 7) {
+          await new Promise((resolve) => setTimeout(resolve, 250));
+        }
+      }
+    } else {
+      try {
+        resolvedAssetId = BigInt(resolvedAssetId.toString());
+      } catch {
+        resolvedAssetId = undefined;
+      }
+    }
+
+    if (resolvedAssetId === undefined) {
+      const message = `No matching SpacetimeDB Asset row was found for "${selectedAsset.name}". Run analysis again so the asset can be registered, then retry containment.`;
+      console.error("[Containment] Asset resolution failed:", {
+        assetId: selectedAsset.id,
+        assetName: selectedAsset.name,
+        assetType: selectedAsset.type,
+      });
+      setContainmentError(message);
+      setAnalysisError(message);
+      setAssetActionPending(false);
+      return;
+    }
+
     const actionType = getContainmentActionType(selectedAsset.type);
+    if (!actionType) {
+      const message = "Unsupported asset type for containment.";
+      console.error("[Containment] ", message, selectedAsset.type);
+      setContainmentError(message);
+      setAssetActionPending(false);
+      return;
+    }
     const command = mitigationPlaybook?.assetId === selectedAsset.id
       ? mitigationPlaybook.command
       : `containment.request --asset "${selectedAsset.name}" --action "${actionType}" --mode record-only`;
     const mitigationDetails = `Applied forensic action for ${selectedAsset.name}: ${command}. ${mitigationPlaybook?.assetId === selectedAsset.id ? mitigationPlaybook.notice : "FumbleBee records the action; no infrastructure adapter is configured."}`;
     try {
       await connection.reducers.applyAssetContainment({
-        assetId: selectedAsset.databaseId,
+        assetId: BigInt(resolvedAssetId),
         actionType,
         mitigationDetails,
       });
+
+      const assetId = selectedAsset.id;
+      assetScopesRef.current = { ...assetScopesRef.current, [assetId]: "Quarantined" };
+      setAssetScopes((current) => ({ ...current, [assetId]: "Quarantined" }));
+      setSelectedAsset((current) => current
+        ? { ...current, scopeStatus: "Quarantined" }
+        : current);
+      setGraph((current) => ({
+        ...current,
+        nodes: applyAssetScopes(current.nodes) as typeof current.nodes,
+      }));
     } catch (error) {
-      setAnalysisError(error instanceof Error ? error.message : "Asset containment failed.");
+      const message = error instanceof Error ? error.message : "Asset containment failed.";
+      console.error("[Containment] applyAssetContainment rejected:", error);
+      setContainmentError(message);
+      setAnalysisError(message);
     } finally {
       setAssetActionPending(false);
     }
@@ -557,7 +644,7 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
 
       <div className="investigation-layout">
         <div className="investigation-left">
-          <section className="panel graph-panel">
+          <section className="panel graph-panel" id="attack-graph" tabIndex={-1}>
             <div className="panel-heading graph-heading"><div><div className="section-title-row"><h2>Attack path</h2></div><p>Observed entity relationships and potential data exposure path</p></div><button className="button button-quiet" onClick={() => setAuditOpen(true)}>Evidence log</button></div>
             <div className="graph-filter-bar" role="group" aria-label="Filter attack graph nodes">
               <span>SHOW</span>
@@ -593,7 +680,7 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
         </div>
       </div>
 
-      {auditOpen && <div className="drawer-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setAuditOpen(false); }}><aside className="audit-drawer" role="dialog" aria-modal="true" aria-labelledby="audit-title"><div className="drawer-header"><div><div className="drawer-kicker"><span className="status-dot" /> TAMPER-EVIDENT RECORD</div><h2 id="audit-title">Audit trail</h2><p>Cryptographically linked investigation events.</p></div><button className="icon-button" onClick={() => setAuditOpen(false)} aria-label="Close audit trail">×</button></div><div className="chain-status"><span><strong>Chain integrity verified</strong><small>All {auditLogs.length} entries are linked and unmodified</small></span></div><div className="audit-list">{auditLogs.map((log) => <article className="audit-entry" key={log.id}><div className="audit-entry-heading"><span className="audit-sequence">#{String(log.sequence).padStart(4, "0")}</span><span className="audit-time">{relativeTime(log.timestamp)}</span></div><h3>{log.action}</h3><span className="audit-actor">by <strong>{log.actor}</strong></span><div className="hash-row"><span>PREVIOUS HASH</span><code>{log.previousHash}</code></div><div className="hash-row"><span>CURRENT HASH</span><code>{log.currentHash}</code></div></article>)}</div><div className="drawer-footer"><span>SHA-256 · Append-only event chain</span><button onClick={() => setAuditOpen(false)}>Done</button></div></aside></div>}
+      {auditOpen && <div className="drawer-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setAuditOpen(false); }}><aside className="audit-drawer" role="dialog" aria-modal="true" aria-labelledby="audit-title"><div className="drawer-header"><div><div className="drawer-kicker"><span className="status-dot" /> TAMPER-EVIDENT RECORD</div><h2 id="audit-title">Audit trail</h2><p>Cryptographically linked investigation events.</p></div><button className="icon-button" onClick={() => setAuditOpen(false)} aria-label="Close audit trail">×</button></div><div className="chain-status"><span><strong>Chain integrity verified</strong><small>All {auditLogs.length} entries are linked and unmodified</small></span></div><div className="audit-list">{auditLogs.map((log) => <article className="audit-entry" key={log.id}><div className="audit-entry-heading"><span className="audit-sequence">#{String(log.sequence).padStart(4, "0")}</span><span className="audit-time">{relativeTime(log.timestamp)}</span></div>      <h3>{formatDisplayedAuditAction(log.action)}</h3><span className="audit-actor">by <strong>{log.actor}</strong></span><div className="hash-row"><span>PREVIOUS HASH</span><code>{log.previousHash}</code></div><div className="hash-row"><span>CURRENT HASH</span><code>{log.currentHash}</code></div></article>)}</div><div className="drawer-footer"><span>SHA-256 · Append-only event chain</span><button onClick={() => setAuditOpen(false)}>Done</button></div></aside></div>}
       {selectedAsset && (
         <div className="drawer-backdrop asset-drawer-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedAsset(null); }}>
           <aside className="asset-inspection-drawer" role="dialog" aria-modal="true" aria-labelledby="asset-drawer-title">
@@ -663,6 +750,7 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
                 <button className="containment-button" onClick={() => void executeContainment()} disabled={assetActionPending || selectedAssetScope === "Quarantined"}>
                   {assetActionPending ? <><LoaderCircle className="spin" size={15} /> Applying containment...</> : selectedAssetScope === "Quarantined" ? <><ShieldCheck size={16} /> Asset Quarantined</> : "Execute Out-of-Band Containment"}
                 </button>
+                {containmentError && <p className="mitigation-error" role="alert">{containmentError}</p>}
               </section>
               <section className="asset-detail-section">
                 <span className="summary-label">RELATED RECOMMENDATIONS</span>
@@ -722,6 +810,19 @@ function getAssetTypeLabel(type: string): string {
     case "database": return "Database";
     default: return "Investigation Asset";
   }
+}
+
+function formatDisplayedAuditAction(action: string): string {
+  if (!action.startsWith("ASSET_CONTAINMENT:")) return action;
+  const parts = action.split(":");
+  const allowedActions = new Set(["isolate_host", "revoke_iam", "lock_s3_bucket", "block_network"]);
+  if (parts.length >= 3 && allowedActions.has(parts[2])) {
+    return `Asset Contained: ${parts[1] || "Unknown asset"} (${parts[2]})`;
+  }
+  if (parts.length >= 3 && allowedActions.has(parts[1])) {
+    return `Asset Contained: Asset #${parts[2]} (${parts[1]})`;
+  }
+  return action;
 }
 
 function toAssetScopeStatus(status: string): AssetScopeStatus {

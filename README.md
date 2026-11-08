@@ -1,6 +1,6 @@
-# SentinelGraph AI
+# FumbleBee
 
-SentinelGraph AI is an insider threat investigation interface for security teams. It provides an investigation dashboard, an AI-assisted case workspace, a read-only attack-path graph, collaborative notes, an activity timeline, and a tamper-evident audit view.
+FumbleBee is an insider threat investigation interface for security teams. It provides an investigation dashboard, an AI-assisted case workspace, an attack-path graph, collaborative notes, an activity timeline, and a tamper-evident audit view.
 
 The repository contains both the Next.js frontend and the SpacetimeDB backend integration:
 
@@ -22,7 +22,8 @@ The development UI can use typed mock data while the generated SpacetimeDB trans
 
 ## Routes
 
-- `/` — investigation dashboard and new-investigation dialog
+- `/` — FumbleBee investigation dashboard and new-investigation dialog
+- `/incidents` — multi-incident command hub
 - `/investigations/[id]` — investigation summary, attack path, AI findings, notes, activity, and audit drawer
 
 ## Build

@@ -517,7 +517,7 @@ export const applyAssetContainment = spacetime.reducer(
     );
     appendAudit(
       ctx,
-      `ASSET_CONTAINMENT:${args.actionType}:${args.assetId}:${args.mitigationDetails}`,
+      `ASSET_CONTAINMENT:${asset.name}:${args.actionType}:${args.assetId}:${args.mitigationDetails}`,
       asset.incidentId,
     );
   },
@@ -591,24 +591,53 @@ export const applyAiAnalysis = spacetime.reducer(
     }
     for (const assetKey of assetKeys) {
       const asset = parsedAssets.find((candidate: any) => candidate.id === assetKey);
-      ctx.db.asset.insert({
-        id: 0n,
-        incidentId: args.incidentId,
-        assetKey,
-        name: asset?.name ?? assetKey,
-        assetType: asset?.type ?? 'resource',
-        riskLevel: asset?.riskLabel ?? args.severity,
-        description: asset?.description ?? '',
-        compromiseStatus: 'targeted',
-      });
+      const desiredName = asset?.name ?? assetKey;
+      const existingAssets: any[] = Array.from(ctx.db.asset.iter()).filter(
+        (candidate: any) => candidate.incidentId === args.incidentId
+          && (candidate.assetKey === assetKey || candidate.name === desiredName),
+      );
+      const existingAsset = existingAssets[0];
+
+      if (existingAsset) {
+        ctx.db.asset.id.delete(existingAsset.id);
+        ctx.db.asset.insert({
+          ...existingAsset,
+          assetKey,
+          name: desiredName,
+          assetType: asset?.type ?? existingAsset.assetType ?? 'resource',
+          riskLevel: asset?.riskLabel ?? args.severity,
+          description: asset?.description ?? existingAsset.description ?? '',
+        });
+      } else {
+        ctx.db.asset.insert({
+          id: 0n,
+          incidentId: args.incidentId,
+          assetKey,
+          name: desiredName,
+          assetType: asset?.type ?? 'resource',
+          riskLevel: asset?.riskLabel ?? args.severity,
+          description: asset?.description ?? '',
+          compromiseStatus: 'targeted',
+        });
+      }
     }
     for (const edge of parsedRelationships) {
+      const sourceAssetKey = edge.sourceId ?? edge.source ?? '';
+      const targetAssetKey = edge.targetId ?? edge.target ?? '';
+      const relationLabel = edge.label ?? edge.relationLabel ?? '';
+      const existingRelationships = Array.from(ctx.db.relationship.iter()).filter(
+        (candidate: any) => candidate.incidentId === args.incidentId
+          && candidate.sourceAssetKey === sourceAssetKey
+          && candidate.targetAssetKey === targetAssetKey
+          && candidate.relationLabel === relationLabel,
+      );
+      if (existingRelationships.length > 0) continue;
       ctx.db.relationship.insert({
         id: 0n,
         incidentId: args.incidentId,
-        sourceAssetKey: edge.sourceId ?? edge.source ?? '',
-        targetAssetKey: edge.targetId ?? edge.target ?? '',
-        relationLabel: edge.label ?? edge.relationLabel ?? '',
+        sourceAssetKey,
+        targetAssetKey,
+        relationLabel,
       });
     }
 
