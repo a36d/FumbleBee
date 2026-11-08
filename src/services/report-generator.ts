@@ -148,6 +148,10 @@ async function readDatabaseSnapshot(timeoutMs = 15000): Promise<{
   auditLogs: AuditLog[];
 }> {
   return new Promise((resolve, reject) => {
+    const configuredDatabase = process.env.SPACETIME_DB_NAME
+      ?? process.env.NEXT_PUBLIC_SPACETIMEDB_MODULE
+      ?? 'sentinelgraph-demo';
+    const databaseName = configuredDatabase === 'sentinelgraph' ? 'sentinelgraph-demo' : configuredDatabase;
     let connection: DbConnection | null = null;
     const timer = setTimeout(() => {
       connection?.disconnect();
@@ -155,8 +159,8 @@ async function readDatabaseSnapshot(timeoutMs = 15000): Promise<{
     }, timeoutMs);
 
     connection = DbConnection.builder()
-      .withUri(process.env.SPACETIME_DB_HOST ?? 'http://127.0.0.1:3000')
-      .withDatabaseName(process.env.SPACETIME_DB_NAME ?? 'sentinelgraph-demo')
+      .withUri(process.env.SPACETIME_DB_HOST ?? process.env.NEXT_PUBLIC_SPACETIMEDB_URI ?? 'http://localhost:3000')
+      .withDatabaseName(databaseName)
       .onConnect((connected) => {
         connected.subscriptionBuilder()
           .onApplied(() => {

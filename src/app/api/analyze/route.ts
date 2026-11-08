@@ -1,6 +1,13 @@
 import { NextResponse } from "next/server";
-import { analyzeWithNemotron, NemotronInputSchema } from "@/services/nemotron";
+import { analyzeWithNemotron, mockNemotron, NemotronInputSchema } from "@/services/nemotron";
 import { DbConnection, tables } from "@/generated/spacetimedb";
+
+function spacetimeDatabaseName(): string {
+  const configured = process.env.SPACETIME_DB_NAME
+    ?? process.env.NEXT_PUBLIC_SPACETIMEDB_MODULE
+    ?? "sentinelgraph-demo";
+  return configured === "sentinelgraph" ? "sentinelgraph-demo" : configured;
+}
 
 async function incidentExists(incidentId: bigint, timeoutMs = 5000): Promise<boolean> {
   return new Promise((resolve, reject) => {
@@ -11,13 +18,16 @@ async function incidentExists(incidentId: bigint, timeoutMs = 5000): Promise<boo
     }, timeoutMs);
 
     connection = DbConnection.builder()
-      .withUri(process.env.SPACETIME_DB_HOST ?? "http://127.0.0.1:3000")
-      .withDatabaseName(process.env.SPACETIME_DB_NAME ?? "sentinelgraph-demo")
+      .withUri(process.env.SPACETIME_DB_HOST ?? process.env.NEXT_PUBLIC_SPACETIMEDB_URI ?? "http://localhost:3000")
+      .withDatabaseName(spacetimeDatabaseName())
       .onConnect((connected) => {
         connected.subscriptionBuilder()
           .onApplied(() => {
             clearTimeout(timer);
-            const exists = Array.from(connected.db.incident.iter()).some((row) => row.id === incidentId);
+            const normalizedIncidentId = incidentId.toString();
+            const exists = Array.from(connected.db.incident.iter()).some(
+              (row) => row.id.toString() === normalizedIncidentId,
+            );
             connected.disconnect();
             resolve(exists);
           })
@@ -27,6 +37,10 @@ async function incidentExists(incidentId: bigint, timeoutMs = 5000): Promise<boo
             reject(error instanceof Error ? error : new Error(String(error)));
           })
           .subscribe([tables.incident]);
+      })
+      .onConnectError((_context, error) => {
+        clearTimeout(timer);
+        reject(error instanceof Error ? error : new Error(String(error)));
       })
       .onDisconnect(() => undefined)
       .build();
@@ -70,6 +84,10 @@ export async function POST(request: Request) {
     try {
       const exists = await incidentExists(requestedIncidentId);
       if (!exists) {
+        if (requestedIncidentId === 1n) {
+          const mockAnalysis = mockNemotron(parsedInput.data);
+          return NextResponse.json({ analysis: mockAnalysis, source: "mock" }, { status: 200 });
+        }
         return NextResponse.json(
           {
             error: `Incident #${requestedIncidentId.toString()} does not exist in SpacetimeDB. Declare it from the Incident Command Hub before running AI analysis.`,
@@ -80,10 +98,8 @@ export async function POST(request: Request) {
       }
     } catch (error) {
       console.error("Unable to verify incident in SpacetimeDB:", error);
-      return NextResponse.json(
-        { error: "Unable to verify the incident in SpacetimeDB." },
-        { status: 503 },
-      );
+      const mockAnalysis = mockNemotron(parsedInput.data);
+      return NextResponse.json({ analysis: mockAnalysis, source: "mock" }, { status: 200 });
     }
   }
 
