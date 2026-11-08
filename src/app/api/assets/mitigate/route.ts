@@ -1,20 +1,21 @@
 import { NextResponse } from "next/server";
-import { z } from "zod";
+import { generateContainmentScript } from "@/services/nemotron";
 
-const MitigationRequestSchema = z.object({
-  asset: z.object({
-    id: z.string().min(1).max(128),
-    name: z.string().trim().min(1).max(200),
-    type: z.enum(["identity", "share", "database", "resource"]),
-    description: z.string().max(1200),
-    scopeStatus: z.enum(["Exfiltrated", "Ransomware Encrypted", "Targeted", "Quarantined"]),
-  }),
-});
+export const runtime = "nodejs";
 
-function shellQuote(value: string) {
-  const singleLineValue = value.replace(/[\r\n]/g, " ");
-  return `'${singleLineValue.replaceAll("'", "'\\''")}'`;
-}
+type MitigationBody = {
+  assetId?: unknown;
+  assetName?: unknown;
+  assetType?: unknown;
+  compromiseStatus?: unknown;
+  asset?: {
+    id?: unknown;
+    name?: unknown;
+    type?: unknown;
+    description?: unknown;
+    scopeStatus?: unknown;
+  };
+};
 
 export async function POST(request: Request) {
   let body: unknown;
@@ -24,46 +25,44 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Request body must be valid JSON." }, { status: 400 });
   }
 
-  const parsed = MitigationRequestSchema.safeParse(body);
-  if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.message }, { status: 400 });
+  if (!body || typeof body !== "object") {
+    return NextResponse.json({ error: "Invalid mitigation request." }, { status: 400 });
   }
 
-  const { asset } = parsed.data;
-  const quotedName = shellQuote(asset.name);
-  const mitigation = (() => {
-    switch (asset.type) {
-      case "identity":
-        return {
-          environment: "AWS CLI",
-          command: `aws iam update-access-key --user-name ${quotedName} --access-key-id '<ACCESS_KEY_ID>' --status Inactive`,
-          rationale: "Disables the specified IAM access key. Replace the access-key placeholder, verify the principal, and preserve credentials for forensic review before applying.",
-        };
-      case "share":
-        return {
-          environment: "AWS CLI",
-          command: `aws s3api put-public-access-block --bucket ${quotedName} --public-access-block-configuration BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true`,
-          rationale: "Blocks public access paths for the named S3 bucket. Confirm the bucket identity and service impact before applying.",
-        };
-      case "database":
-        return {
-          environment: "AWS CLI",
-          command: `aws rds modify-db-instance --db-instance-identifier ${quotedName} --vpc-security-group-ids '<ISOLATION_SECURITY_GROUP_ID>' --apply-immediately`,
-          rationale: "Replaces the database instance's VPC security-group assignment with an isolation group. Substitute a reviewed group ID and validate connectivity dependencies before applying.",
-        };
-      case "resource":
-        return {
-          environment: "BASH",
-          command: `sudo iptables -I INPUT 1 -s '<SOURCE_CIDR>' -j DROP`,
-          rationale: `Adds a host firewall drop rule for the specified source network associated with ${asset.name}. Replace the CIDR with verified indicators and confirm the host and rollback path before applying.`,
-        };
-    }
-  })();
+  const input = body as MitigationBody;
+  const assetId = String(input.assetId ?? input.asset?.id ?? "").trim();
+  const assetName = String(input.assetName ?? input.asset?.name ?? "").trim();
+  const assetType = String(input.assetType ?? input.asset?.type ?? "").trim();
+  const compromiseStatus = String(
+    input.compromiseStatus ?? input.asset?.scopeStatus ?? "Targeted",
+  ).trim();
+  const metadata = input.asset?.description
+    ? String(input.asset.description)
+    : undefined;
 
-  return NextResponse.json({
-    ...mitigation,
-    assetId: asset.id,
-    generatedFor: asset.name,
-    notice: "Generated for analyst review only; FumbleBee does not execute infrastructure commands.",
-  });
+  if (!assetId || !assetName || !assetType || !compromiseStatus) {
+    return NextResponse.json(
+      {
+        error: "assetId, assetName, assetType, and compromiseStatus are required.",
+      },
+      { status: 400 },
+    );
+  }
+
+  try {
+    const payload = await generateContainmentScript({
+      id: assetId,
+      name: assetName,
+      type: assetType,
+      compromiseStatus,
+      metadata,
+    });
+    return NextResponse.json(payload, { status: 200 });
+  } catch (error) {
+    console.error("[Nemotron] Containment script generation failed:", error);
+    return NextResponse.json(
+      { error: "Containment script generation failed." },
+      { status: 500 },
+    );
+  }
 }

@@ -19,7 +19,7 @@ import { useSpacetimeConnection } from "@/components/spacetime-connection-provid
 
 type MitigationPlaybook = {
   assetId: string;
-  environment: "AWS CLI" | "BASH";
+  environment: "AWS CLI" | "BASH" | "PowerShell";
   command: string;
   rationale: string;
   notice: string;
@@ -467,9 +467,27 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
           },
         }),
       });
-      const result = await response.json() as MitigationPlaybook & { error?: string };
+      const result = await response.json() as {
+        command?: string;
+        description?: string;
+        executionEnvironment?: "aws-cli" | "bash" | "powershell";
+        error?: string;
+      };
       if (!response.ok) throw new Error(result.error ?? "Could not generate a mitigation command.");
-      setMitigationPlaybook(result);
+      if (!result.command || !result.description || !result.executionEnvironment) {
+        throw new Error("The mitigation service returned an incomplete command.");
+      }
+      setMitigationPlaybook({
+        assetId: selectedAsset.id,
+        environment: result.executionEnvironment === "aws-cli"
+          ? "AWS CLI"
+          : result.executionEnvironment === "powershell"
+            ? "PowerShell"
+            : "BASH",
+        command: result.command,
+        rationale: result.description,
+        notice: "Generated for analyst review only; FumbleBee does not execute infrastructure commands.",
+      });
     } catch (error) {
       setMitigationError(error instanceof Error ? error.message : "Could not generate a mitigation command.");
     } finally {

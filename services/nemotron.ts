@@ -39,6 +39,49 @@ export interface NemotronOptions {
   timeoutMs?: number;
 }
 
+export interface ContainmentAsset {
+  id: string;
+  name: string;
+  type: string;
+  compromiseStatus: string;
+  metadata?: string;
+}
+
+export interface ContainmentScript {
+  command: string;
+  description: string;
+  executionEnvironment: 'aws-cli' | 'bash' | 'powershell';
+}
+
+export const ContainmentScriptSchema = z.object({
+  command: z.string().min(1),
+  description: z.string().min(1),
+  executionEnvironment: z.enum(['aws-cli', 'bash', 'powershell']),
+});
+
+function mockContainmentScript(asset: ContainmentAsset): ContainmentScript {
+  const normalizedType = asset.type.toLowerCase();
+  if (normalizedType === 'identity') {
+    return {
+      command: `Disable-ADAccount -Identity "${asset.name.replace(/"/g, '`\"`')}"`,
+      description: `Disable the compromised identity ${asset.name} to prevent further authenticated actions.`,
+      executionEnvironment: 'powershell',
+    };
+  }
+  if (normalizedType === 'share' || normalizedType === 'database') {
+    return {
+      command: `aws ec2 stop-instances --instance-ids "${asset.id}"`,
+      description: `Stop the compromised cloud asset ${asset.name} to halt active access and containment-sensitive operations.`,
+      executionEnvironment: 'aws-cli',
+    };
+  }
+  return {
+    command: `iptables -A OUTPUT -d "${asset.id}" -j DROP`,
+    description: `Block outbound traffic to the compromised network asset ${asset.name} immediately.`,
+    executionEnvironment: 'bash',
+  };
+}
+
 export function mockNemotron(input: NemotronInput): NemotronAnalysis {
   const text = `${input.title} ${input.description} ${input.notes.join(' ')}`.toLowerCase();
   const isExfiltration = /exfil|download|cloud|upload|archive/.test(text);
@@ -202,5 +245,80 @@ export async function analyzeWithNemotron(
         : String(error);
     console.warn(`[Nemotron] Falling back to structured mock data (${reason})`);
     return { analysis: mockNemotron(input), source: 'mock' };
+  }
+}
+
+export async function generateContainmentScript(
+  asset: ContainmentAsset,
+  options: NemotronOptions = {},
+): Promise<ContainmentScript> {
+  const apiKey = options.apiKey ?? process.env.NVIDIA_API_KEY;
+  if (!apiKey) {
+    console.warn('[Nemotron] Falling back to structured mock data (NVIDIA_API_KEY is not set)');
+    return mockContainmentScript(asset);
+  }
+
+  const endpoint = options.endpoint ?? process.env.NVIDIA_API_URL ?? 'https://integrate.api.nvidia.com/v1/chat/completions';
+  const fetchImpl = options.fetch ?? globalThis.fetch;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), options.timeoutMs ?? 15000);
+  const requestSchema = {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      command: { type: 'string', minLength: 1 },
+      description: { type: 'string', minLength: 1 },
+      executionEnvironment: { type: 'string', enum: ['aws-cli', 'bash', 'powershell'] },
+    },
+    required: ['command', 'description', 'executionEnvironment'],
+  };
+
+  try {
+    const response = await fetchImpl(endpoint, {
+      method: 'POST',
+      signal: controller.signal,
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: options.model ?? process.env.NVIDIA_NEMOTRON_MODEL ?? 'nvidia/llama-3.1-nemotron-ultra-253b-v1',
+        messages: [
+          {
+            role: 'system',
+            content: 'You are an air-gapped tactical SecOps agent. Given a compromised cloud/network asset, output ONLY executable CLI containment commands (e.g., AWS CLI, Linux iptables, or PowerShell) and a 1-sentence tactical rationale. Do not output chat filler.',
+          },
+          {
+            role: 'user',
+            content: JSON.stringify(asset),
+          },
+        ],
+        temperature: 0.1,
+        max_tokens: 512,
+        response_format: {
+          type: 'json_schema',
+          json_schema: { name: 'sentinelgraph_containment', strict: true, schema: requestSchema },
+        },
+      }),
+    });
+    if (!response.ok) throw new Error(`Nemotron API returned ${response.status}`);
+    const payload = await response.json() as {
+      choices?: Array<{ message?: { content?: string } }>;
+    };
+    const content = payload.choices?.[0]?.message?.content;
+    if (!content) throw new Error('Nemotron API returned no content');
+    const parsed = ContainmentScriptSchema.safeParse(JSON.parse(content));
+    if (!parsed.success) throw new Error(`Nemotron returned invalid containment script: ${parsed.error.message}`);
+    clearTimeout(timeout);
+    return parsed.data;
+  } catch (error) {
+    clearTimeout(timeout);
+    const reason = error instanceof Error && error.name === 'AbortError'
+      ? 'request timed out'
+      : error instanceof Error
+        ? error.message
+        : String(error);
+    console.warn(`[Nemotron] Falling back to structured mock data (${reason})`);
+    return mockContainmentScript(asset);
   }
 }
