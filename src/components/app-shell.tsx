@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import Image from "next/image";
 import { Activity, Bell, ChevronDown, Command, FileClock, LayoutDashboard, Network, Search, ShieldCheck } from "lucide-react";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -12,8 +13,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <div className="app-shell">
       <aside className="sidebar">
         <Link href="/" className="brand">
-          <span className="brand-mark"><Network size={20} strokeWidth={2.2} /></span>
-          <span><strong>sentinel<span>graph</span></strong><small>THREAT INTELLIGENCE</small></span>
+          <Image className="brand-logo" src="/fumblebee-bee.png" alt="" width={42} height={42} priority />
+          <span className="brand-name">FumbleBee</span>
         </Link>
         <div className="workspace-switch"><span className="workspace-icon">A</span><span className="workspace-copy"><strong>Acme Corporation</strong><small>Enterprise workspace</small></span><ChevronDown size={14} /></div>
         <div className="nav-label">WORKSPACE</div>

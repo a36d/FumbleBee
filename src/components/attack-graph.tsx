@@ -62,12 +62,12 @@ export function AttackGraph({ nodes, edges, highRiskOnly, onNodeClick }: AttackG
     <div className="graph-canvas">
       <div className="graph-status"><span className="status-dot" /> LIVE ATTACK PATH <span className="graph-status-divider" /> {visibleNodeIds.size} ENTITIES</div>
       <ReactFlow key={nodes.map(({ id }) => id).join(":")} nodes={displayNodes} edges={displayEdges} nodeTypes={nodeTypes} fitView fitViewOptions={{ padding: 0.18 }} minZoom={0.45} maxZoom={1.5} nodesDraggable={false} nodesConnectable={false} elementsSelectable={false} onNodeClick={onNodeClick} panOnDrag zoomOnScroll zoomOnPinch attributionPosition="top-right">
-        <Background color="#233144" gap={22} size={1} />
+        <Background color="#3c686d" gap={22} size={1} />
         <Controls showInteractive={false} />
         <MiniMap position="top-right" nodeColor={(node) => {
           const asset = node.data.asset as Asset;
-          return asset.type === "identity" ? "#fb7185" : asset.type === "share" || asset.type === "resource" ? "#fbbf24" : "#f43f5e";
-        }} maskColor="rgba(2, 6, 23, 0.7)" />
+          return asset.type === "identity" ? "#1d5057" : asset.type === "share" || asset.type === "resource" ? "#d5bb52" : "#88a9aa";
+        }} maskColor="rgba(16, 47, 53, 0.7)" />
       </ReactFlow>
       <div className="graph-legend"><span><i className="legend-dot legend-red" /> Identity</span><span><i className="legend-dot legend-amber" /> Resource</span><span><i className="legend-dot legend-rose" /> Datastore</span></div>
     </div>

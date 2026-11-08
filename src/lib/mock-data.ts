@@ -142,15 +142,15 @@ export const notes: InvestigationNote[] = [
 ];
 
 export const activity: ActivityFeed[] = [
-  { id: "a1", incidentId: "INC-2024-0847", action: "AI analysis completed", actor: "SentinelGraph AI", createdAt: "2024-11-18T10:14:00Z", kind: "analysis" },
+  { id: "a1", incidentId: "INC-2024-0847", action: "AI analysis completed", actor: "FumbleBee AI", createdAt: "2024-11-18T10:14:00Z", kind: "analysis" },
   { id: "a2", incidentId: "INC-2024-0847", action: "Investigation note added", actor: "Priya Shah", createdAt: "2024-11-18T10:12:00Z", kind: "note" },
-  { id: "a3", incidentId: "INC-2024-0847", action: "Risk score increased to 94", actor: "SentinelGraph AI", createdAt: "2024-11-18T10:06:00Z", kind: "risk" },
-  { id: "a4", incidentId: "INC-2024-0847", action: "Attack path generated", actor: "SentinelGraph AI", createdAt: "2024-11-18T09:44:00Z", kind: "graph" },
+  { id: "a3", incidentId: "INC-2024-0847", action: "Risk score increased to 94", actor: "FumbleBee AI", createdAt: "2024-11-18T10:06:00Z", kind: "risk" },
+  { id: "a4", incidentId: "INC-2024-0847", action: "Attack path generated", actor: "FumbleBee AI", createdAt: "2024-11-18T09:44:00Z", kind: "graph" },
   { id: "a5", incidentId: "INC-2024-0847", action: "Incident created", actor: "Detection engine", createdAt: "2024-11-18T09:42:00Z", kind: "incident" },
 ];
 
 export const auditLogs: AuditLog[] = [
-  { id: "l3", sequence: 3, action: "AI analysis completed", actor: "sentinelgraph.ai", timestamp: "2024-11-18T10:14:00Z", previousHash: "97af0c1a8b2e5d40", currentHash: "c04e8db7f912a6e3" },
+  { id: "l3", sequence: 3, action: "AI analysis completed", actor: "fumblebee.ai", timestamp: "2024-11-18T10:14:00Z", previousHash: "97af0c1a8b2e5d40", currentHash: "c04e8db7f912a6e3" },
   { id: "l2", sequence: 2, action: "Investigation note added", actor: "priya.shah@acme.io", timestamp: "2024-11-18T10:12:00Z", previousHash: "f63d281a4c91b7e0", currentHash: "97af0c1a8b2e5d40" },
   { id: "l1", sequence: 1, action: "Incident created", actor: "detection.engine", timestamp: "2024-11-18T09:42:00Z", previousHash: "0000000000000000", currentHash: "f63d281a4c91b7e0" },
 ];

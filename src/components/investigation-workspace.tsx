@@ -295,7 +295,7 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
       const formattedGraph = formatAttackGraph(analysis.assets, analysis.edges);
       setGraph(getAttackPathLayout(formattedGraph.nodes, formattedGraph.edges));
       setAnalysisResult(analysis);
-      const event: ActivityFeed = { id: `analysis-${Date.now()}`, incidentId: incident.id, action: "AI analysis completed", actor: "SentinelGraph AI", createdAt: new Date().toISOString(), kind: "analysis" };
+      const event: ActivityFeed = { id: `analysis-${Date.now()}`, incidentId: incident.id, action: "AI analysis completed", actor: "FumbleBee AI", createdAt: new Date().toISOString(), kind: "analysis" };
       setEvents((current) => [event, ...current]);
     } catch (error) {
       setAnalysisError(error instanceof Error ? error.message : "Analysis could not be completed.");
@@ -366,7 +366,7 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
       {resetNotice && <p className="reset-notice" role="status"><CheckCircle2 size={14} />{resetNotice}</p>}
 
       <div className="investigation-summary panel">
-        <div className="summary-score"><div className="score-gauge" style={{ "--score": `${findings.riskScore}%` } as React.CSSProperties}><span>{findings.riskScore}</span><small>RISK</small></div><div><span className="summary-label">RISK SCORE</span><strong className="summary-score-text">{findings.severity} risk detected</strong><small>Updated {analysisResult ? "just now" : "12 minutes ago"}</small></div></div>
+        <div className="summary-score"><div className="score-gauge" style={{ "--score": `${findings.riskScore}%`, "--risk-hue": `${Math.round(185 * (1 - findings.riskScore / 100))}` } as React.CSSProperties}><span>{findings.riskScore}</span><small>RISK</small></div><div><span className="summary-label">RISK SCORE</span><strong className="summary-score-text">{findings.severity} risk detected</strong><small>Updated {analysisResult ? "just now" : "12 minutes ago"}</small></div></div>
         <div className="summary-separator" /><div className="summary-stat"><span className="summary-label">THREAT CLASSIFICATION</span><strong><span className="classification-icon"><AlertTriangle size={14} /></span>{findings.threatClassification}</strong><small>Confidence {findings.confidence}%</small></div>
         <div className="summary-separator" /><div className="summary-stat"><span className="summary-label">BLAST RADIUS</span><strong className="blast-number">{findings.blastRadius} <small>assets</small></strong><small>Across connected systems</small></div>
         <div className="summary-separator" /><div className="summary-stat"><span className="summary-label">CREATED</span><strong>{relativeTime(incident.createdAt)}</strong><small>By detection engine</small></div>
@@ -384,13 +384,13 @@ export function InvestigationWorkspace({ incidentId }: { incidentId: string }) {
             <AttackGraph nodes={graph.nodes} edges={graph.edges} highRiskOnly={highRiskOnly} onNodeClick={handleGraphNodeClick} />
             <div className="graph-footnote"><span><i className="graph-foot-dot" /> Path confidence <strong>{findings.confidence}%</strong></span><span>{analysisResult ? "Generated just now" : "Seeded investigation path"}</span></div>
           </section>
-          <section className="panel impact-panel"><div className="panel-heading"><div><div className="section-title-row"><span className="panel-heading-icon panel-icon-rose"><AlertTriangle size={16} /></span><h2>Impact summary</h2></div></div><span className="impact-tag">{findings.severity.toUpperCase()} IMPACT</span></div><p>{findings.impactSummary} Activity spans <strong>{findings.blastRadius} connected assets</strong>.</p><div className="impact-tags"><span><DatabaseIcon /> Customer records</span><span><CodeIcon /> Source code</span><span><LockKeyhole size={12} /> Restricted share</span></div></section>
+          <section className="panel impact-panel"><div className="panel-heading"><div><div className="section-title-row"><span className="panel-heading-icon panel-icon-rose"><AlertTriangle size={16} /></span><h2>Impact summary</h2></div></div><span className={`impact-tag severity-${findings.severity.toLowerCase()}`}>{findings.severity.toUpperCase()} IMPACT</span></div><p>{findings.impactSummary} Activity spans <strong>{findings.blastRadius} connected assets</strong>.</p><div className="impact-tags"><span><DatabaseIcon /> Customer records</span><span><CodeIcon /> Source code</span><span><LockKeyhole size={12} /> Restricted share</span></div></section>
         </div>
 
         <div className="investigation-right">
           <section className="panel findings-panel">
             <div className="panel-heading findings-heading"><div><div className="section-title-row"><span className="panel-heading-icon panel-icon-violet"><Sparkles size={16} /></span><h2>AI findings</h2></div><p>Nemotron-powered investigation insights</p></div><span className="confidence-chip"><span />{findings.confidence}% confidence</span></div>
-            <div className="finding-classification"><span className="summary-label">CLASSIFICATION</span><div><span className="classification-icon"><AlertTriangle size={14} /></span><strong>{findings.threatClassification}</strong><span className="finding-severity">{findings.severity}</span></div></div>
+            <div className="finding-classification"><span className="summary-label">CLASSIFICATION</span><div><span className="classification-icon"><AlertTriangle size={14} /></span><strong>{findings.threatClassification}</strong><span className={`finding-severity severity-${findings.severity.toLowerCase()}`}>{findings.severity}</span></div></div>
             <div className="finding-blast"><div><span className="summary-label">ESTIMATED BLAST RADIUS</span><small>Potentially affected assets</small></div><strong>{findings.blastRadius}<span> assets</span></strong></div>
             <div className="finding-summary"><span className="summary-label">IMPACT SUMMARY</span><p>{findings.impactSummary}</p></div>
             <div className="recommendations"><span className="summary-label">RECOMMENDED ACTIONS</span>{findings.recommendations.map((recommendation, index) => {

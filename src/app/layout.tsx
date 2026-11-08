@@ -4,8 +4,8 @@ import "./globals.css";
 import { AppShell } from "@/components/app-shell";
 
 export const metadata: Metadata = {
-  title: "SentinelGraph AI | Insider Threat Investigations",
-  description: "Investigate insider threats with AI-powered attack path analysis.",
+  title: "FumbleBee | Insider Threat Investigations",
+  description: "FumbleBee helps security teams investigate insider threats with AI-powered attack path analysis.",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
