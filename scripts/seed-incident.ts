@@ -1,20 +1,43 @@
 import { spawnSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { createSentinelGraphClient } from '../sdk/src/index';
 
-const HOST = 'http://localhost:3000';
-const DATABASE = 'sentinelgraph';
-const DEMO_TITLE = 'Unusual Bulk Data Access & Privilege Escalation';
+const HOST = process.env.NEXT_PUBLIC_SPACETIMEDB_URI || 'http://localhost:3000';
+const DATABASE = process.env.NEXT_PUBLIC_SPACETIMEDB_MODULE || 'sentinelgraph';
+const DEMO_TITLE = 'Unusual Bulk Data Access & Exfiltration Attempt';
 const DEMO_NOTES = [
   'Spike in egress traffic detected via VPC Flow Logs toward external endpoint.',
   'IAM Role assume event triggered without corresponding JIRA approval ticket.',
 ];
 
 function resolveSpacetimeCli(): string {
+  const localAppData = process.env.LOCALAPPDATA;
+  let versionedCli: string | undefined;
+
+  // Check versioned directory if present (e.g., AppData/Local/SpacetimeDB/bin/2.14.1/spacetimedb-cli.exe)
+  if (localAppData) {
+    const binDir = join(localAppData, 'SpacetimeDB', 'bin');
+    if (existsSync(binDir)) {
+      try {
+        const subdirs = readdirSync(binDir);
+        for (const dir of subdirs) {
+          const candidate = join(binDir, dir, 'spacetimedb-cli.exe');
+          if (existsSync(candidate)) {
+            versionedCli = candidate;
+            break;
+          }
+        }
+      } catch {
+        // Fall back to general candidates
+      }
+    }
+  }
+
   const candidates = [
     process.env.SPACETIME_CLI,
-    process.env.LOCALAPPDATA ? join(process.env.LOCALAPPDATA, 'SpacetimeDB', 'spacetime.exe') : undefined,
+    versionedCli,
+    localAppData ? join(localAppData, 'SpacetimeDB', 'bin', 'current', 'spacetimedb-cli.exe') : undefined,
+    localAppData ? join(localAppData, 'SpacetimeDB', 'spacetime.exe') : undefined,
     join(process.env.USERPROFILE ?? '', '.cargo', 'bin', 'spacetime.exe'),
     join(process.env.USERPROFILE ?? '', '.cargo', 'bin', 'spacetime'),
     'spacetime',
@@ -69,7 +92,7 @@ function callReducer(name: string, args: Array<string | bigint | number>): void 
     'call',
     DATABASE,
     reducerNames[name] ?? name.replace(/([A-Z])/g, '_$1').replace(/^_/, '').toLowerCase(),
-    ...args.map(value => typeof value === 'string' ? JSON.stringify(value) : String(value)),
+    ...args.map(value => (typeof value === 'string' ? JSON.stringify(value) : String(value))),
     '--server', HOST,
     '--yes',
   ];
@@ -87,47 +110,27 @@ async function seedIncident() {
     `SELECT id, title FROM Incident WHERE title = '${escapeSql(DEMO_TITLE)}'`,
   );
 
-  const client = createSentinelGraphClient({
-    host: HOST,
-    databaseName: DATABASE,
-    transport: {
-      reducer: {
-        call: (_name, _args) => undefined,
-      },
-    },
-  });
-
   let incidentId: bigint;
   if (existingRows.length > 0) {
     incidentId = BigInt(String(existingRows[0][0]));
     console.log(`✓ Primary demo incident already exists (id: ${incidentId}).`);
   } else {
-    const transport = client.options.transport;
-    if (!transport?.reducer) throw new Error('Seed transport is unavailable');
-
-    transport.reducer.call = (name, args) => {
-      const orderedArguments = [
-        String(args.title),
-        String(args.description),
-        String(args.subjectName),
-        String(args.status),
-        String(args.severity),
-      ];
-      callReducer(name, orderedArguments);
-    };
-
-    client.createIncident({
-      title: DEMO_TITLE,
-      description: 'Production service account accessed sensitive S3 storage buckets and modified IAM trust policies outside standard business hours.',
-      subjectName: 'svc-prod-data-pipeline',
-      status: 'Investigating',
-      severity: 'High',
-    });
+    // Call the create_incident reducer directly via CLI
+    // Matches the updated schema: title, description, subjectName, status, severity, owner, assignedTo
+    // Matches the 4 expected arguments: title, description, severity, initialNotes
+    callReducer('create_incident', [
+      DEMO_TITLE,
+      'Exfiltration burst: 84.2 GB queried via svc-prod-data-pipeline to staging S3 bucket outside core business hours (02:14 UTC). Staging bucket modified to public-read ACL.',
+      'Critical',
+      'Initial detection: anomalous burst from Morgan Chen / svc-prod-data-pipeline.',
+    ]);
 
     const insertedRows = getSqlRows(
       `SELECT id FROM Incident WHERE title = '${escapeSql(DEMO_TITLE)}' LIMIT 1`,
     );
-    if (insertedRows.length === 0) throw new Error('Incident reducer completed but the incident was not found.');
+    if (insertedRows.length === 0) {
+      throw new Error('Incident reducer completed but the incident was not found.');
+    }
     incidentId = BigInt(String(insertedRows[0][0]));
     console.log(`✓ Seeded incident "${DEMO_TITLE}" (id: ${incidentId}).`);
   }

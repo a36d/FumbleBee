@@ -103,6 +103,8 @@ export function Dashboard() {
 
   const displayIncidents: Incident[] = liveIncidents.map((incident) => ({
         id: incident.id.toString(),
+        owner: incident.owner,
+        assignedTo: incident.assignedTo,
         title: incident.title,
         subjectName: incident.subjectName,
         description: incident.description,
