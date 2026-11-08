@@ -117,6 +117,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const incidentId = investigationMatch?.[1] ?? null;
   const [authOpenToken, setAuthOpenToken] = useState(0);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(3);
   const notificationRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -165,10 +166,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 className="icon-button notification-button"
                 aria-label="Notifications"
                 aria-expanded={notificationsOpen}
-                onClick={() => setNotificationsOpen((current) => !current)}
+                onClick={() => {
+                  setNotificationsOpen((current) => !current);
+                  setUnreadCount(0);
+                }}
               >
                 <Bell size={17} />
-                <i />
+                {unreadCount > 0 && (
+                  <span className="notification-unread-badge" aria-label={`${unreadCount} unread notifications`}>
+                    {unreadCount}
+                  </span>
+                )}
               </button>
               {notificationsOpen && (
                 <div className="notification-popover" role="dialog" aria-label="Recent notifications">
