@@ -12,6 +12,6 @@ import {
 
 export default {
   username: __t.string(),
-  passphraseHash: __t.string(),
+  passwordHash: __t.string(),
   role: __t.string(),
 };

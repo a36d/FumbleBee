@@ -38,7 +38,7 @@ import AddInvestigationNoteReducer from "./add_investigation_note_reducer";
 import ApplyAiAnalysisReducer from "./apply_ai_analysis_reducer";
 import ApplyAssetContainmentReducer from "./apply_asset_containment_reducer";
 import AssignUserRoleReducer from "./assign_user_role_reducer";
-import ChangeUserPassphraseReducer from "./change_user_passphrase_reducer";
+import ChangeUserPasswordReducer from "./change_user_password_reducer";
 import CreateIncidentReducer from "./create_incident_reducer";
 import CreateUserReducer from "./create_user_reducer";
 import DeleteUserReducer from "./delete_user_reducer";
@@ -164,7 +164,7 @@ const reducersSchema = __reducers(
   __reducerSchema("apply_ai_analysis", ApplyAiAnalysisReducer),
   __reducerSchema("apply_asset_containment", ApplyAssetContainmentReducer),
   __reducerSchema("assign_user_role", AssignUserRoleReducer),
-  __reducerSchema("change_user_passphrase", ChangeUserPassphraseReducer),
+  __reducerSchema("change_user_password", ChangeUserPasswordReducer),
   __reducerSchema("create_incident", CreateIncidentReducer),
   __reducerSchema("create_user", CreateUserReducer),
   __reducerSchema("delete_user", DeleteUserReducer),

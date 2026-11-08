@@ -12,7 +12,7 @@ const user = table(
     role: t.string(),
     createdAt: t.timestamp(),
     username: t.string().default('').index('btree'),
-    passphraseHash: t.string().default(''),
+    passwordHash: t.string().default(''),
   },
 );
 
@@ -145,7 +145,7 @@ function requireRole(ctx: any, allowed: Role[]) {
       name: 'SOC Analyst',
       email: 'analyst@fumblebee.local',
       username: `soc-${ctx.sender.toHexString().slice(0, 12)}`,
-      passphraseHash: '',
+      passwordHash: '',
       role: 'investigator',
       createdAt: ctx.timestamp,
     });
@@ -253,7 +253,7 @@ export const init = spacetime.init((ctx: any) => {
       name: 'Administrator',
       email: 'admin@fumblebee.local',
       username: 'administrator',
-      passphraseHash: '',
+      passwordHash: '',
       role: 'admin',
       createdAt: ctx.timestamp,
     });
@@ -275,7 +275,7 @@ export const createUser = spacetime.reducer(
       name: args.name,
       email: contactEmail(args.email, args.name),
       username,
-      passphraseHash: '',
+      passwordHash: '',
       role: args.role,
       createdAt: ctx.timestamp,
     });
@@ -284,13 +284,13 @@ export const createUser = spacetime.reducer(
 );
 
 export const signUp = spacetime.reducer(
-  { username: t.string(), passphraseHash: t.string(), role: t.string() },
+  { username: t.string(), passwordHash: t.string(), role: t.string() },
   (ctx: any, args: any) => {
     const allowedRoles = ['admin', 'investigator', 'commander', 'legal'];
     if (!allowedRoles.includes(args.role)) throw new SenderError('Invalid role');
     const username = args.username.trim();
     if (!username) throw new SenderError('Username is required');
-    if (!args.passphraseHash) throw new SenderError('Passphrase hash is required');
+    if (!args.passwordHash) throw new SenderError('Password hash is required');
     if (ctx.db.user.identity.find(ctx.sender)) throw new SenderError('User already registered');
     for (const userRow of ctx.db.user.iter()) {
       if (userRow.username === username) throw new SenderError('Username already exists');
@@ -300,7 +300,7 @@ export const signUp = spacetime.reducer(
       name: username,
       email: defaultEmail(username),
       username,
-      passphraseHash: args.passphraseHash,
+      passwordHash: args.passwordHash,
       role: args.role,
       createdAt: ctx.timestamp,
     });
@@ -309,7 +309,7 @@ export const signUp = spacetime.reducer(
 );
 
 export const signIn = spacetime.reducer(
-  { username: t.string(), passphraseHash: t.string() },
+  { username: t.string(), passwordHash: t.string() },
   (ctx: any, args: any) => {
     const username = args.username.trim();
     let existing: any = null;
@@ -319,7 +319,7 @@ export const signIn = spacetime.reducer(
         break;
       }
     }
-    if (!existing || existing.passphraseHash !== args.passphraseHash) {
+    if (!existing || existing.passwordHash !== args.passwordHash) {
       throw new SenderError('Invalid credentials');
     }
 
@@ -359,23 +359,23 @@ export const updateUserProfile = spacetime.reducer(
   },
 );
 
-export const changeUserPassphrase = spacetime.reducer(
-  { currentPassphraseHash: t.string(), newPassphraseHash: t.string() },
+export const changeUserPassword = spacetime.reducer(
+  { currentPasswordHash: t.string(), newPasswordHash: t.string() },
   (ctx: any, args: any) => {
     const existing = ctx.db.user.identity.find(ctx.sender);
     if (!existing) throw new SenderError('Responder account not found');
-    if (existing.passphraseHash !== args.currentPassphraseHash) {
-      throw new SenderError('Current passphrase is incorrect');
+    if (existing.passwordHash !== args.currentPasswordHash) {
+      throw new SenderError('Current password is incorrect');
     }
-    if (!/^[a-f0-9]{64}$/.test(args.newPassphraseHash)) {
-      throw new SenderError('New passphrase hash is invalid');
+    if (!/^[a-f0-9]{64}$/.test(args.newPasswordHash)) {
+      throw new SenderError('New password hash is invalid');
     }
-    if (args.currentPassphraseHash === args.newPassphraseHash) {
-      throw new SenderError('Choose a different passphrase');
+    if (args.currentPasswordHash === args.newPasswordHash) {
+      throw new SenderError('Choose a different password');
     }
     ctx.db.user.identity.delete(ctx.sender);
-    ctx.db.user.insert({ ...existing, passphraseHash: args.newPassphraseHash });
-    appendAudit(ctx, `USER_PASSPHRASE_CHANGED: [${existing.username}]`, null);
+    ctx.db.user.insert({ ...existing, passwordHash: args.newPasswordHash });
+    appendAudit(ctx, `USER_PASSWORD_CHANGED: [${existing.username}]`, null);
   },
 );
 

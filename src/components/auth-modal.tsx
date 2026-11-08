@@ -6,7 +6,7 @@ import { X } from "lucide-react";
 import { tables } from "@/generated/spacetimedb";
 import type { User } from "@/generated/spacetimedb/types";
 import { useSpacetimeConnection } from "@/components/spacetime-connection-provider";
-import { hashPassphrase } from "@/lib/auth";
+import { hashPassword } from "@/lib/auth";
 
 const responderRoles = [
   "SOC Investigator",
@@ -29,6 +29,19 @@ interface SavedResponderSession extends ResponderSession {
 }
 
 type ResponderAccount = Pick<User, "identity" | "username" | "role">;
+
+function withTimeout<T>(operation: Promise<T>, timeoutMs = 5000): Promise<T> {
+  let timeoutId: number | undefined;
+  const timeout = new Promise<never>((_resolve, reject) => {
+    timeoutId = window.setTimeout(
+      () => reject(new Error("The SpacetimeDB responder did not respond within 5 seconds. Please try again.")),
+      timeoutMs,
+    );
+  });
+  return Promise.race([operation, timeout]).finally(() => {
+    if (timeoutId !== undefined) window.clearTimeout(timeoutId);
+  });
+}
 
 const roleDescriptions: Record<ResponderRole, string> = {
   "SOC Investigator": "Investigate alerts and document incident evidence.",
@@ -104,7 +117,7 @@ export function AuthModal({ externalOpenToken = 0 }: { externalOpenToken?: numbe
   const [mode, setMode] = useState<AuthMode>("signin");
   const [open, setOpen] = useState(false);
   const [username, setUsername] = useState("");
-  const [passphrase, setPassphrase] = useState("");
+  const [password, setPassword] = useState("");
   const [role, setRole] = useState<ResponderRole>("SOC Investigator");
   const [users, setUsers] = useState<ResponderAccount[]>([]);
   const [savedSessions, setSavedSessions] = useState<SavedResponderSession[]>([]);
@@ -193,8 +206,8 @@ export function AuthModal({ externalOpenToken = 0 }: { externalOpenToken?: numbe
   async function submitSession(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const cleanUsername = username.trim();
-    if (!cleanUsername || !passphrase) {
-      setError("Enter a username and passphrase to continue.");
+    if (!cleanUsername || !password) {
+      setError("Enter a username and password to continue.");
       return;
     }
     if (!connection) {
@@ -205,24 +218,24 @@ export function AuthModal({ externalOpenToken = 0 }: { externalOpenToken?: numbe
     setSubmitting(true);
     setError("");
     try {
-      const passphraseHash = await hashPassphrase(passphrase);
+      const passwordHash = await hashPassword(password);
       let nextRole: ResponderRole;
       if (mode === "signin") {
         const existingUser = Array.from(connection.db.user.iter())
           .find((user) => user.username === cleanUsername);
-        await connection.reducers.signIn({
+        await withTimeout(connection.reducers.signIn({
           username: cleanUsername,
-          passphraseHash,
-        });
+          passwordHash,
+        }));
         const authenticatedUser = Array.from(connection.db.user.iter())
           .find((user) => user.username === cleanUsername);
         nextRole = responderRoleFromDatabase(authenticatedUser?.role ?? existingUser?.role ?? "");
       } else {
-        await connection.reducers.signUp({
+        await withTimeout(connection.reducers.signUp({
           username: cleanUsername,
-          passphraseHash,
+          passwordHash,
           role: reducerRole(role),
-        });
+        }));
         nextRole = role;
       }
 
@@ -233,7 +246,7 @@ export function AuthModal({ externalOpenToken = 0 }: { externalOpenToken?: numbe
       setSavedSessions(Array.isArray(savedSessionsValue) ? savedSessionsValue.filter(isSavedResponderSession) : []);
       setOpen(false);
       setUsername("");
-      setPassphrase("");
+      setPassword("");
       setError("");
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : mode === "signin" ? "Sign in failed." : "Responder registration failed.");
@@ -260,7 +273,7 @@ export function AuthModal({ externalOpenToken = 0 }: { externalOpenToken?: numbe
       localStorage.removeItem("fumblebee_session");
       setSession(null);
       setUsername("");
-      setPassphrase("");
+      setPassword("");
       setError("");
       window.location.reload();
     } catch {
@@ -283,10 +296,10 @@ export function AuthModal({ externalOpenToken = 0 }: { externalOpenToken?: numbe
     setSubmitting(true);
     setError("");
     try {
-      await connection.reducers.assignUserRole({
+      await withTimeout(connection.reducers.assignUserRole({
         targetIdentity: target.identity,
         newRole: reducerRole(newRole),
-      });
+      }));
     } catch (assignError) {
       setError(assignError instanceof Error ? assignError.message : "Responder role update failed.");
     } finally {
@@ -413,8 +426,8 @@ export function AuthModal({ externalOpenToken = 0 }: { externalOpenToken?: numbe
                   <input value={username} onChange={(event) => setUsername(event.target.value)} autoComplete="username" required />
                 </label>
                 <label>
-                  Passphrase
-                  <input type="password" value={passphrase} onChange={(event) => setPassphrase(event.target.value)} autoComplete={mode === "register" ? "new-password" : "current-password"} required />
+                  Password
+                  <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete={mode === "register" ? "new-password" : "current-password"} required />
                 </label>
                 {mode === "register" && (
                   <label>
@@ -424,7 +437,7 @@ export function AuthModal({ externalOpenToken = 0 }: { externalOpenToken?: numbe
                     </select>
                   </label>
                 )}
-                <p className="auth-demo-notice">{mode === "register" ? "Registration hashes the passphrase with SHA-256 before sending it to the SpacetimeDB sign-up reducer." : "Your passphrase is hashed with SHA-256 and verified by SpacetimeDB."}</p>
+                <p className="auth-demo-notice">{mode === "register" ? "Registration hashes the password with SHA-256 before sending it to the SpacetimeDB sign-up reducer." : "Your password is hashed with SHA-256 and verified by SpacetimeDB."}</p>
                 {(error || connectionError) && <p className="auth-error" role="alert">{error || connectionError}</p>}
                 <div className="modal-actions">
                   {session && <button className="button button-secondary" type="button" onClick={signOut}>Sign out</button>}

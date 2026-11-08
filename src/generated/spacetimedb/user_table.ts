@@ -17,5 +17,5 @@ export default __t.row({
   role: __t.string(),
   createdAt: __t.timestamp().name("created_at"),
   username: __t.string(),
-  passphraseHash: __t.string().name("passphrase_hash"),
+  passwordHash: __t.string().name("password_hash"),
 });

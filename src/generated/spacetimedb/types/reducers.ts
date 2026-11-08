@@ -10,7 +10,7 @@ import AddInvestigationNoteReducer from "../add_investigation_note_reducer";
 import ApplyAiAnalysisReducer from "../apply_ai_analysis_reducer";
 import ApplyAssetContainmentReducer from "../apply_asset_containment_reducer";
 import AssignUserRoleReducer from "../assign_user_role_reducer";
-import ChangeUserPassphraseReducer from "../change_user_passphrase_reducer";
+import ChangeUserPasswordReducer from "../change_user_password_reducer";
 import CreateIncidentReducer from "../create_incident_reducer";
 import CreateUserReducer from "../create_user_reducer";
 import DeleteUserReducer from "../delete_user_reducer";
@@ -25,7 +25,7 @@ export type AddInvestigationNoteParams = __Infer<typeof AddInvestigationNoteRedu
 export type ApplyAiAnalysisParams = __Infer<typeof ApplyAiAnalysisReducer>;
 export type ApplyAssetContainmentParams = __Infer<typeof ApplyAssetContainmentReducer>;
 export type AssignUserRoleParams = __Infer<typeof AssignUserRoleReducer>;
-export type ChangeUserPassphraseParams = __Infer<typeof ChangeUserPassphraseReducer>;
+export type ChangeUserPasswordParams = __Infer<typeof ChangeUserPasswordReducer>;
 export type CreateIncidentParams = __Infer<typeof CreateIncidentReducer>;
 export type CreateUserParams = __Infer<typeof CreateUserReducer>;
 export type DeleteUserParams = __Infer<typeof DeleteUserReducer>;

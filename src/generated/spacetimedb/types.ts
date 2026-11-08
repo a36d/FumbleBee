@@ -91,6 +91,6 @@ export const User = __t.object("User", {
   role: __t.string(),
   createdAt: __t.timestamp(),
   username: __t.string(),
-  passphraseHash: __t.string(),
+  passwordHash: __t.string(),
 });
 export type User = __Infer<typeof User>;

@@ -6,13 +6,26 @@ import { CircleCheck, KeyRound, Loader2, Mail, Save, ShieldAlert, UserRound, X }
 import { tables } from "@/generated/spacetimedb";
 import type { Incident, User } from "@/generated/spacetimedb/types";
 import { useSpacetimeConnection } from "@/components/spacetime-connection-provider";
-import { hashPassphrase } from "@/lib/auth";
+import { hashPassword } from "@/lib/auth";
 
 function riskLabel(score: number): string {
   if (score >= 80) return "Critical";
   if (score >= 60) return "High";
   if (score >= 35) return "Moderate";
   return "Low";
+}
+
+function withTimeout<T>(operation: Promise<T>, timeoutMs = 5000): Promise<T> {
+  let timeoutId: number | undefined;
+  const timeout = new Promise<never>((_resolve, reject) => {
+    timeoutId = window.setTimeout(
+      () => reject(new Error("The SpacetimeDB responder did not respond within 5 seconds. Please try again.")),
+      timeoutMs,
+    );
+  });
+  return Promise.race([operation, timeout]).finally(() => {
+    if (timeoutId !== undefined) window.clearTimeout(timeoutId);
+  });
 }
 
 export function ProfileDialog() {
@@ -23,11 +36,11 @@ export function ProfileDialog() {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [currentPassphrase, setCurrentPassphrase] = useState("");
-  const [newPassphrase, setNewPassphrase] = useState("");
-  const [confirmPassphrase, setConfirmPassphrase] = useState("");
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
-  const [savingPassphrase, setSavingPassphrase] = useState(false);
+  const [savingPassword, setSavingPassword] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
@@ -107,33 +120,33 @@ export function ProfileDialog() {
     }
   }
 
-  async function saveNewPassphrase(event: React.FormEvent<HTMLFormElement>) {
+  async function saveNewPassword(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!connection || !profile) {
-      setError(connectionError || "Sign in and connect to SpacetimeDB to change your passphrase.");
+      setError(connectionError || "Sign in and connect to SpacetimeDB to change your password.");
       return;
     }
-    if (newPassphrase !== confirmPassphrase) {
-      setError("New passphrases do not match.");
+    if (newPassword !== confirmPassword) {
+      setError("New passwords do not match.");
       return;
     }
-    setSavingPassphrase(true);
+    setSavingPassword(true);
     setError("");
     setNotice("");
     try {
-      const [currentPassphraseHash, newPassphraseHash] = await Promise.all([
-        hashPassphrase(currentPassphrase),
-        hashPassphrase(newPassphrase),
+      const [currentPasswordHash, newPasswordHash] = await Promise.all([
+        hashPassword(currentPassword),
+        hashPassword(newPassword),
       ]);
-      await connection.reducers.changeUserPassphrase({ currentPassphraseHash, newPassphraseHash });
-      setCurrentPassphrase("");
-      setNewPassphrase("");
-      setConfirmPassphrase("");
-      setNotice("Passphrase updated.");
+      await withTimeout(connection.reducers.changeUserPassword({ currentPasswordHash, newPasswordHash }));
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      setNotice("Password updated.");
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : "Could not change passphrase.");
+      setError(saveError instanceof Error ? saveError.message : "Could not change password.");
     } finally {
-      setSavingPassphrase(false);
+      setSavingPassword(false);
     }
   }
 
@@ -174,7 +187,7 @@ export function ProfileDialog() {
                 <ShieldAlert size={20} />
                 <div>
                   <strong>No active responder session</strong>
-                  <p>Sign in from the top bar to edit contact information, change your passphrase, and view account-linked risk.</p>
+                  <p>Sign in from the top bar to edit contact information, change your password, and view account-linked risk.</p>
                 </div>
               </div>
             ) : (
@@ -222,26 +235,26 @@ export function ProfileDialog() {
                   </button>
                 </form>
 
-                <form className="profile-settings-form profile-password-form" onSubmit={saveNewPassphrase}>
-                  <div className="profile-section-heading"><KeyRound size={15} /><h3>Change passphrase</h3></div>
+                <form className="profile-settings-form profile-password-form" onSubmit={saveNewPassword}>
+                  <div className="profile-section-heading"><KeyRound size={15} /><h3>Change password</h3></div>
                   <label>
-                    Current passphrase
-                    <input type="password" autoComplete="current-password" value={currentPassphrase} onChange={(event) => setCurrentPassphrase(event.target.value)} required />
+                    Current password
+                    <input type="password" autoComplete="current-password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} required />
                   </label>
                   <div className="profile-password-row">
                     <label>
-                      New passphrase
-                      <input type="password" autoComplete="new-password" value={newPassphrase} onChange={(event) => setNewPassphrase(event.target.value)} minLength={8} required />
+                      New password
+                      <input type="password" autoComplete="new-password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} minLength={8} required />
                     </label>
                     <label>
-                      Confirm new passphrase
-                      <input type="password" autoComplete="new-password" value={confirmPassphrase} onChange={(event) => setConfirmPassphrase(event.target.value)} minLength={8} required />
+                      Confirm new password
+                      <input type="password" autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} minLength={8} required />
                     </label>
                   </div>
-                  <p className="profile-form-hint">Use at least 8 characters. Your current passphrase is required to make this change.</p>
-                  <button className="profile-submit profile-submit-secondary" type="submit" disabled={!connection || !profile || savingPassphrase || !currentPassphrase || newPassphrase.length < 8 || !confirmPassphrase}>
-                    {savingPassphrase ? <Loader2 className="profile-spinner" size={15} /> : <KeyRound size={15} />}
-                    {savingPassphrase ? "Updating passphrase..." : "Update passphrase"}
+                  <p className="profile-form-hint">Use at least 8 characters. Your current password is required to make this change.</p>
+                  <button className="profile-submit profile-submit-secondary" type="submit" disabled={!connection || !profile || savingPassword || !currentPassword || newPassword.length < 8 || !confirmPassword}>
+                    {savingPassword ? <Loader2 className="profile-spinner" size={15} /> : <KeyRound size={15} />}
+                    {savingPassword ? "Updating password..." : "Update password"}
                   </button>
                 </form>
 
