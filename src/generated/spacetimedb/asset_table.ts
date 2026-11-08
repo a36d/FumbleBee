@@ -18,4 +18,5 @@ export default __t.row({
   assetType: __t.string().name("asset_type"),
   riskLevel: __t.string().name("risk_level"),
   description: __t.string(),
+  compromiseStatus: __t.string().name("compromise_status"),
 });

@@ -27,6 +27,7 @@ export const Asset = __t.object("Asset", {
   assetType: __t.string(),
   riskLevel: __t.string(),
   description: __t.string(),
+  compromiseStatus: __t.string(),
 });
 export type Asset = __Infer<typeof Asset>;
 
@@ -86,6 +87,8 @@ export const User = __t.object("User", {
   email: __t.string(),
   role: __t.string(),
   createdAt: __t.timestamp(),
+  username: __t.string(),
+  passphraseHash: __t.string(),
 });
 export type User = __Infer<typeof User>;
 

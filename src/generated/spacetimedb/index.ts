@@ -36,10 +36,14 @@ import {
 // Import all reducer arg schemas
 import AddInvestigationNoteReducer from "./add_investigation_note_reducer";
 import ApplyAiAnalysisReducer from "./apply_ai_analysis_reducer";
+import ApplyAssetContainmentReducer from "./apply_asset_containment_reducer";
+import AssignUserRoleReducer from "./assign_user_role_reducer";
 import CreateIncidentReducer from "./create_incident_reducer";
 import CreateUserReducer from "./create_user_reducer";
 import DeleteUserReducer from "./delete_user_reducer";
 import SetUserRoleReducer from "./set_user_role_reducer";
+import SignUpReducer from "./sign_up_reducer";
+import UpdateAssetCompromiseStatusReducer from "./update_asset_compromise_status_reducer";
 import UpdateIncidentReducer from "./update_incident_reducer";
 
 // Import all procedure arg schemas
@@ -141,6 +145,9 @@ const tablesSchema = __schema({
       { accessor: 'identity', name: 'User_identity_idx_btree', algorithm: 'btree', columns: [
         'identity',
       ] },
+      { accessor: 'username', name: 'User_username_idx_btree', algorithm: 'btree', columns: [
+        'username',
+      ] },
     ],
     constraints: [
       { name: 'User_identity_key', constraint: 'unique', columns: ['identity'] },
@@ -152,10 +159,14 @@ const tablesSchema = __schema({
 const reducersSchema = __reducers(
   __reducerSchema("add_investigation_note", AddInvestigationNoteReducer),
   __reducerSchema("apply_ai_analysis", ApplyAiAnalysisReducer),
+  __reducerSchema("apply_asset_containment", ApplyAssetContainmentReducer),
+  __reducerSchema("assign_user_role", AssignUserRoleReducer),
   __reducerSchema("create_incident", CreateIncidentReducer),
   __reducerSchema("create_user", CreateUserReducer),
   __reducerSchema("delete_user", DeleteUserReducer),
   __reducerSchema("set_user_role", SetUserRoleReducer),
+  __reducerSchema("sign_up", SignUpReducer),
+  __reducerSchema("update_asset_compromise_status", UpdateAssetCompromiseStatusReducer),
   __reducerSchema("update_incident", UpdateIncidentReducer),
 );
 

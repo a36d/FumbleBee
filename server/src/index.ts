@@ -11,6 +11,8 @@ const user = table(
     email: t.string(),
     role: t.string(),
     createdAt: t.timestamp(),
+    username: t.string().default('').index('btree'),
+    passphraseHash: t.string().default(''),
   },
 );
 
@@ -46,6 +48,7 @@ const asset = table(
     assetType: t.string(),
     riskLevel: t.string(),
     description: t.string(),
+    compromiseStatus: t.string().default('targeted'),
   },
 );
 
@@ -106,7 +109,7 @@ const spacetime = schema({
   auditLog,
 });
 
-type Role = 'admin' | 'investigator' | 'viewer';
+type Role = 'admin' | 'investigator' | 'commander' | 'legal' | 'viewer';
 
 function requireRole(ctx: any, allowed: Role[]) {
   let row = ctx.db.user.identity.find(ctx.sender);
@@ -115,6 +118,8 @@ function requireRole(ctx: any, allowed: Role[]) {
       identity: ctx.sender,
       name: 'SOC Analyst',
       email: 'analyst@sentinelgraph.local',
+      username: `soc-${ctx.sender.toHexString().slice(0, 12)}`,
+      passphraseHash: '',
       role: 'investigator',
       createdAt: ctx.timestamp,
     });
@@ -221,6 +226,8 @@ export const init = spacetime.init((ctx: any) => {
       identity: ctx.sender,
       name: 'Administrator',
       email: 'admin@sentinelgraph.local',
+      username: 'administrator',
+      passphraseHash: '',
       role: 'admin',
       createdAt: ctx.timestamp,
     });
@@ -231,9 +238,66 @@ export const createUser = spacetime.reducer(
   { identity: t.identity(), name: t.string(), email: t.string(), role: t.string() },
   (ctx: any, args: any) => {
     requireRole(ctx as any, ['admin']);
-    if (!['admin', 'investigator', 'viewer'].includes(args.role)) throw new SenderError('Invalid role');
-    ctx.db.user.insert({ identity: args.identity, name: args.name, email: args.email, role: args.role, createdAt: ctx.timestamp });
+    if (!['admin', 'investigator', 'commander', 'legal', 'viewer'].includes(args.role)) throw new SenderError('Invalid role');
+    const username = args.name.trim().toLowerCase().replace(/\s+/g, '-');
+    if (!username) throw new SenderError('Invalid username');
+    for (const userRow of ctx.db.user.iter()) {
+      if (userRow.username === username) throw new SenderError('Username already exists');
+    }
+    ctx.db.user.insert({
+      identity: args.identity,
+      name: args.name,
+      email: args.email,
+      username,
+      passphraseHash: '',
+      role: args.role,
+      createdAt: ctx.timestamp,
+    });
     appendAudit(ctx, `UserCreated:${args.identity.toHexString()}:${args.role}`, null);
+  },
+);
+
+export const signUp = spacetime.reducer(
+  { username: t.string(), passphraseHash: t.string(), role: t.string() },
+  (ctx: any, args: any) => {
+    const allowedRoles = ['admin', 'investigator', 'commander', 'legal'];
+    if (!allowedRoles.includes(args.role)) throw new SenderError('Invalid role');
+    const username = args.username.trim();
+    if (!username) throw new SenderError('Username is required');
+    if (!args.passphraseHash) throw new SenderError('Passphrase hash is required');
+    if (ctx.db.user.identity.find(ctx.sender)) throw new SenderError('User already registered');
+    for (const userRow of ctx.db.user.iter()) {
+      if (userRow.username === username) throw new SenderError('Username already exists');
+    }
+    ctx.db.user.insert({
+      identity: ctx.sender,
+      name: username,
+      email: `${username}@sentinelgraph.local`,
+      username,
+      passphraseHash: args.passphraseHash,
+      role: args.role,
+      createdAt: ctx.timestamp,
+    });
+    appendAudit(ctx, `USER_REGISTERED: [${username}] as [${args.role}]`, null);
+  },
+);
+
+export const assignUserRole = spacetime.reducer(
+  { targetIdentity: t.identity(), newRole: t.string() },
+  (ctx: any, args: any) => {
+    requireRole(ctx as any, ['admin']);
+    if (!['admin', 'investigator', 'commander', 'legal'].includes(args.newRole)) {
+      throw new SenderError('Invalid role');
+    }
+    const existing = ctx.db.user.identity.find(args.targetIdentity);
+    if (!existing) throw new SenderError('User not found');
+    ctx.db.user.identity.delete(args.targetIdentity);
+    ctx.db.user.insert({ ...existing, role: args.newRole });
+    appendAudit(
+      ctx,
+      `USER_ROLE_ASSIGNED: [${existing.username}] -> [${args.newRole}]`,
+      null,
+    );
   },
 );
 
@@ -241,7 +305,7 @@ export const setUserRole = spacetime.reducer(
   { identity: t.identity(), role: t.string() },
   (ctx: any, args: any) => {
     requireRole(ctx as any, ['admin']);
-    if (!['admin', 'investigator', 'viewer'].includes(args.role)) throw new SenderError('Invalid role');
+    if (!['admin', 'investigator', 'commander', 'legal', 'viewer'].includes(args.role)) throw new SenderError('Invalid role');
     const existing = ctx.db.user.identity.find(args.identity);
     if (!existing) throw new SenderError('User not found');
     ctx.db.user.identity.delete(args.identity);
@@ -329,6 +393,85 @@ export const addInvestigationNote = spacetime.reducer(
   },
 );
 
+export const updateAssetCompromiseStatus = spacetime.reducer(
+  { assetId: t.u64(), compromiseStatus: t.string() },
+  (ctx: any, args: any) => {
+    const actor = requireRole(ctx as any, ['admin', 'investigator', 'commander']);
+    const allowedStatuses = [
+      'clean',
+      'targeted',
+      'compromised',
+      'ransomware_encrypted',
+      'data_exfiltrated',
+      'quarantined',
+    ];
+    if (!allowedStatuses.includes(args.compromiseStatus)) {
+      throw new SenderError('Invalid compromise status');
+    }
+    const existing = ctx.db.asset.id.find(args.assetId);
+    if (!existing) throw new SenderError('Asset not found');
+    ctx.db.asset.id.delete(args.assetId);
+    ctx.db.asset.insert({ ...existing, compromiseStatus: args.compromiseStatus });
+    addActivity(
+      ctx,
+      existing.incidentId,
+      actor.name,
+      `Asset ${existing.name} status changed to ${args.compromiseStatus}`,
+    );
+    appendAudit(
+      ctx,
+      `ASSET_STATUS_UPDATED:${args.assetId}:${args.compromiseStatus}`,
+      existing.incidentId,
+    );
+  },
+);
+
+export const applyAssetContainment = spacetime.reducer(
+  { assetId: t.u64(), actionType: t.string(), mitigationDetails: t.string() },
+  (ctx: any, args: any) => {
+    const actor = requireRole(ctx as any, ['admin', 'investigator', 'commander']);
+    const allowedActions = [
+      'isolate_host',
+      'revoke_iam',
+      'lock_s3_bucket',
+      'block_network',
+    ];
+    if (!allowedActions.includes(args.actionType)) {
+      throw new SenderError('Invalid containment action');
+    }
+    const asset = ctx.db.asset.id.find(args.assetId);
+    if (!asset) throw new SenderError('Asset not found');
+
+    ctx.db.asset.id.delete(args.assetId);
+    ctx.db.asset.insert({ ...asset, compromiseStatus: 'quarantined', riskLevel: 'Low' });
+
+    const incident = ctx.db.incident.id.find(asset.incidentId);
+    if (incident) {
+      const reductions: Record<string, number> = {
+        isolate_host: 20,
+        revoke_iam: 25,
+        lock_s3_bucket: 30,
+        block_network: 15,
+      };
+      const reducedRisk = Math.max(0, Number(incident.riskScore) - reductions[args.actionType]);
+      ctx.db.incident.id.delete(asset.incidentId);
+      ctx.db.incident.insert({ ...incident, riskScore: reducedRisk });
+    }
+
+    addActivity(
+      ctx,
+      asset.incidentId,
+      actor.name,
+      `Containment applied: ${args.actionType} on ${asset.name}`,
+    );
+    appendAudit(
+      ctx,
+      `ASSET_CONTAINMENT:${args.actionType}:${args.assetId}:${args.mitigationDetails}`,
+      asset.incidentId,
+    );
+  },
+);
+
 export const applyAiAnalysis = spacetime.reducer(
   {
     incidentId: t.u64(),
@@ -405,6 +548,7 @@ export const applyAiAnalysis = spacetime.reducer(
         assetType: asset?.type ?? 'resource',
         riskLevel: asset?.riskLabel ?? args.severity,
         description: asset?.description ?? '',
+        compromiseStatus: 'targeted',
       });
     }
     for (const edge of parsedRelationships) {

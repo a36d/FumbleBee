@@ -16,4 +16,6 @@ export default __t.row({
   email: __t.string(),
   role: __t.string(),
   createdAt: __t.timestamp().name("created_at"),
+  username: __t.string(),
+  passphraseHash: __t.string().name("passphrase_hash"),
 });
